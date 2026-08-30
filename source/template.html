@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>{{STYLE}}</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="nav">
+    <div class="nav-head">
+      <div class="nav-kicker">{{KICKER}}</div>
+      <h1 class="nav-title">{{TITLE}}</h1>
+      <div class="nav-meta">{{SUBTITLE}}</div>
+    </div>
+    <div class="nav-views" data-active="doc">
+      <span class="seg-pill" aria-hidden="true"></span>
+      <button data-view="doc" class="on">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3"/><path d="M5.5 8h5M5.5 11h5"/></svg>
+        Doc
+      </button>
+      <button data-view="raw">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3L2 8l4 5"/><path d="M10 3l4 5-4 5"/></svg>
+        Source
+      </button>
+      <button data-view="canvas">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="9.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="5.5" y="10" width="5" height="3.5" rx="1"/><path d="M4 6v2h8V6M8 8v2"/></svg>
+        Canvas
+      </button>
+    </div>
+    <nav class="toc nav-panel on" id="toc"></nav>
+    <div class="nav-panel" id="graphList"></div>
+    <div class="nav-foot">
+      <button id="btnMd" title="Download the markdown source" aria-label="Download markdown">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8"/><path d="M4.5 7L8 10.5 11.5 7"/><path d="M2.5 13.5h11"/></svg>
+      </button>
+      <button id="btnCopy" title="Copy the markdown source" aria-label="Copy markdown">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="1.5" width="9" height="9" rx="1.5"/><path d="M10.5 13.5h-8a1 1 0 01-1-1v-8"/></svg>
+      </button>
+      <button id="btnPrint" title="Print or save as PDF" aria-label="Print">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6V1.5h7V6"/><rect x="1.5" y="6" width="13" height="5.5" rx="1"/><rect x="4.5" y="9.5" width="7" height="5"/></svg>
+      </button>
+      <span class="nav-foot-sp"></span>
+      <button id="btnTheme" class="theme-toggle" title="Switch theme" aria-label="Switch theme">
+        <span class="theme-icon"></span><span class="theme-label"></span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="nav-handle" id="btnNav" role="button" tabindex="0" title="Drag to resize, click to collapse">
+    <span class="nav-handle-bar"></span>
+  </div>
+
+  <main class="main" id="main">
+    <section class="view on" id="docView">
+      <article class="doc" id="doc"></article>
+    </section>
+
+    <section class="view" id="rawView">
+      <pre class="raw" id="rawSrc"></pre>
+    </section>
+
+    <section class="view" id="canvasView">
+      <div class="cv-bar">
+        <span class="cv-title" id="cvTitle"></span>
+        <span class="sp"></span>
+        <button id="cvFit" title="Fit everything on screen">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5V2.5h3M14 5.5V2.5h-3M2 10.5v3h3M14 10.5v3h-3"/></svg>
+          Fit
+        </button>
+        <button id="cvZoomOut" title="Zoom out" aria-label="Zoom out">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4"/></svg>
+        </button>
+        <span class="cv-zoom" id="cvZoomLabel">100%</span>
+        <button id="cvZoomIn" title="Zoom in" aria-label="Zoom in">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4M7 5v4"/></svg>
+        </button>
+        <button id="cvFocus" title="Dim everything except the selected node and its neighbours">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.5"/><circle cx="8" cy="8" r="6"/></svg>
+          Focus
+        </button>
+        <button id="cvSnap" title="Snap a dragged node to the edges and centres of other nodes">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2v6a4 4 0 008 0V2"/><path d="M4 6h3M9 6h3"/></svg>
+          Snap
+        </button>
+        <span class="cv-ro" id="cvReadonly" style="display:none"
+              title="This browser cannot store the layout, so editing is locked. Anything moved would be gone on reopening. Use Save to keep a layout.">Read only</span>
+        <span class="cv-div"></span>
+        <button id="cvSave" title="Save the layout as JSON">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8"/><path d="M4.5 7L8 10.5 11.5 7"/><path d="M2.5 13.5h11"/></svg>
+          Save
+        </button>
+        <label class="file" title="Load a saved layout">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10.5v-8"/><path d="M4.5 6L8 2.5 11.5 6"/><path d="M2.5 13.5h11"/></svg>
+          Load<input type="file" id="cvLoad" accept="application/json,.json">
+        </label>
+        <button id="cvReset" title="Drop this diagram's layout and style changes and go back to the document">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 11-1.9-4.2"/><path d="M13.5 1.5v3.2h-3.2"/></svg>
+          Reset
+        </button>
+        <span class="cv-div"></span>
+        <button id="cvToDoc" title="Jump to where this diagram sits in the document">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3"/><path d="M5.5 8h5M5.5 11h5"/></svg>
+          Show in doc
+        </button>
+      </div>
+      <div class="cv-stage" id="cvStage">
+        <div class="cv-world" id="cvWorld">
+          <svg class="cv-edges" id="cvEdges" width="12000" height="9000"></svg>
+        </div>
+        <div class="cv-inspect" id="cvInspect"></div>
+        <div class="cv-map" id="cvMap">
+          <div class="cvm-head" id="cvMapHead" title="Collapse the minimap">
+            <span class="cvm-name">Minimap</span>
+            <span class="sp"></span>
+            <span class="cvm-chev" id="cvMapChev"></span>
+          </div>
+          <div class="cvm-clip"><div class="cvm-inner">
+            <div class="cvm-body" id="cvMapBody">
+              <canvas class="cvm-canvas" id="cvMapCanvas"></canvas>
+              <div class="cvm-vp" id="cvMapVp"></div>
+            </div>
+          </div></div>
+        </div>
+        <div class="cv-empty" id="cvEmpty" style="display:none">
+          This document has no graph to put on the canvas.<br>
+          Add a <code>```mermaid</code> block starting with <code>graph</code> or <code>flowchart</code>, or a <code>```canvas</code> block.
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script id="doc-src" type="application/x-analysis-doc-base64">{{CONTENT_B64}}</script>
+<script>window.DOC_META = {{META_JSON}};</script>
+<script>{{VENDOR_MARKED}}</script>
+<script>{{VENDOR_MERMAID}}</script>
+<script>{{APP}}</script>
+
+</body>
+</html>

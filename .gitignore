@@ -1,0 +1,6 @@
+.DS_Store
+
+# What `setup` fetches. 3.2MB of someone else's code, pinned by version and sha256 in
+# source/fetch-vendor.sh, so a clone gets the same bytes by running setup rather than by
+# carrying them here.
+/source/vendor/

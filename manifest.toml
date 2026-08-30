@@ -1,0 +1,15 @@
+# The specification is `./open-package spec`
+
+[open-package]
+version = "1.0.0"
+
+[package]
+name = "analysis-doc"
+version = "1.0.0"
+description = "Bakes one markdown file into a single HTML document with no external requests"
+requires = ["python3", "bash", "curl"]
+
+[command]
+setup = "bash source/fetch-vendor.sh"
+build = "python3 source/build.py"
+verify = "bash source/verify.sh"
