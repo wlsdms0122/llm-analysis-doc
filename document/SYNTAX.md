@@ -28,6 +28,8 @@ Labels (kicker, table headers, `####`, toolbars) are mono, uppercase, wide track
 | view switch | **Doc**, **Source** (the markdown as it is), **Canvas** |
 | left panel | In doc and source view, the contents (`##`, `###`, `####` collected automatically, current position highlighted, and pressing one from the source view goes back to the document and moves there). In canvas view, the diagram list and the inspector for the selected node or edge |
 | bottom left | Icon actions: download MD, copy MD, print. Theme toggle on the right (system, light, dark, showing the current state in the icon and its colour) |
+
+The theme is the reader's rather than the document's, so the choice is kept under one key for every analysis-doc and holds across all of them. It is applied in the `<head>`, before the shell paints, so opening a document in a stored dark does not start with a frame of light. Where the browser blocks storage the toggle still works and the choice lasts until the page is closed.
 | right | The body, one vertical scroll |
 
 Colours in a mermaid diagram are baked into the SVG, so they do not follow a CSS variable on their own. Changing the theme reinitialises with the tokens at that moment and redraws everything. A system theme change does the same.

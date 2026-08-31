@@ -1017,8 +1017,16 @@
     { k: 'light', icon: ICON.sun, label: 'Light' },
     { k: 'dark', icon: ICON.moon, label: 'Dark' }
   ];
+  // The theme is the reader's, not the document's, so the key carries no slug and one
+  // choice holds across every document they open. The key is declared in the head, where
+  // it is read early enough to set the theme before the shell paints.
+  var THEME_KEY = window.THEME_KEY;
   var themeIdx = 0;
   var themeBtn = $('#btnTheme');
+  function themeIndexOf(key) {
+    for (var i = 0; i < THEMES.length; i++) if (THEMES[i].k === key) return i;
+    return -1;
+  }
   // The one place a theme reaches the screen, repainting the surfaces that bake colours in.
   // Pairing that up at each call site instead means one missed spot keeps its old theme.
   function paintTheme() {
@@ -1033,6 +1041,9 @@
   }
   themeBtn.addEventListener('click', function () {
     themeIdx = (themeIdx + 1) % THEMES.length;
+    // Only a press writes. The system listener repaints without moving the choice, and
+    // writing there would turn following the system into a stored light or dark.
+    try { localStorage.setItem(THEME_KEY, THEMES[themeIdx].k); } catch (e) { }
     paintTheme();
   });
   if (window.matchMedia) {
@@ -1041,6 +1052,10 @@
     if (mq.addEventListener) mq.addEventListener('change', onSys);
     else if (mq.addListener) mq.addListener(onSys);
   }
+  try {
+    var savedTheme = themeIndexOf(localStorage.getItem(THEME_KEY));
+    if (savedTheme >= 0) themeIdx = savedTheme;
+  } catch (e) { }
   paintTheme();
 
   // ---------------------------------------------------------------- own dropdown
