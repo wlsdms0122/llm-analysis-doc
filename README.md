@@ -28,7 +28,7 @@ Skip `setup` and `build` gives you the setup command instead of a stack trace.
 
 ## Syntax
 
-`document/syntax.md` is the SSoT for the full syntax and the canvas controls. `document/example.md` is a working example of every component, and new documents start by copying it. This is only a list of what exists.
+`document/SYNTAX.md` is the SSoT for the full syntax and the canvas controls. `document/EXAMPLE.md` is a working example of every component, and new documents start by copying it. This is only a list of what exists.
 
 - frontmatter: `title`, `kicker`, `subtitle`, `slug`. All optional. Without them the first `#` heading is used
 - callouts: `:::note` `:::ok` `:::warn` `:::danger`. Text after the name is the title
@@ -64,8 +64,8 @@ The canvas follows the same rule. It is a window onto the document's diagrams ra
 
 | path | what it is |
 |---|---|
-| `document/syntax.md` | Syntax SSoT. Every component and the canvas controls |
-| `document/example.md` | A working example of every component. The starting point for a new document |
+| `document/SYNTAX.md` | Syntax SSoT. Every component and the canvas controls |
+| `document/EXAMPLE.md` | A working example of every component. The starting point for a new document |
 | `source/build.py` | The builder. Markdown plus shell into a single HTML. Standard library only |
 | `source/fetch-vendor.sh` | Fetches marked and mermaid. Pinned versions, sha256 checked |
 | `source/verify.sh` | Bakes the example and checks size, self containment, and leftover placeholders |
@@ -78,4 +78,4 @@ The canvas follows the same rule. It is a window onto the document's diagrams ra
 
 Raise `version` in `manifest.toml` when the syntax or the behaviour changes. Leave it alone for presentation only edits like typos and style numbers.
 
-If you changed how `source/app.js` behaves, look at `document/syntax.md` (the syntax) and this README (the summary) at the same time. Let the three disagree and someone writing a document will use syntax that does not exist. UI wording also lives in `source/template.html`.
+If you changed how `source/app.js` behaves, look at `document/SYNTAX.md` (the syntax) and this README (the summary) at the same time. Let the three disagree and someone writing a document will use syntax that does not exist. UI wording also lives in `source/template.html`.

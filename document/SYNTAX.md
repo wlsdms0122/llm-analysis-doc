@@ -232,8 +232,8 @@ This is an open-package. `open-package spec` explains the specification.
 analysis-doc/
   manifest.toml           required runner version, package identity, commands. The only required file here
   README.md               what this package is and when to use it
-  document/syntax.md      this document, the syntax SSoT
-  document/example.md     an example using every component
+  document/SYNTAX.md      this document, the syntax SSoT
+  document/EXAMPLE.md     an example using every component
   source/build.py         the builder, standard library only, no dependencies
   source/fetch-vendor.sh  fetches vendor, pinned versions, sha256 checked
   source/verify.sh        bakes and checks size, self containment, leftover placeholders

@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 out=$(mktemp -t analysis-doc-verify.XXXXXX).html
 trap 'rm -f "$out"' EXIT
 
-python3 source/build.py document/example.md -o "$out" >/dev/null
+python3 source/build.py document/EXAMPLE.md -o "$out" >/dev/null
 
 bytes=$(wc -c <"$out" | tr -d ' ')
 mb=$((bytes / 1048576))
@@ -37,4 +37,4 @@ if grep -qE '\{\{[A-Z_]+\}\}' "$out"; then
   exit 1
 fi
 
-echo "ok  example.md -> ${mb}MB single HTML, no external requests, no placeholders"
+echo "ok  EXAMPLE.md -> ${mb}MB single HTML, no external requests, no placeholders"
