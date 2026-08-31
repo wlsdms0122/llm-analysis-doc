@@ -729,6 +729,14 @@
     });
   }
   onRepaint(paintMermaid);
+  // mermaid is baked as ES modules and arrives one microtask later than this script, so the
+  // first paint has to wait for it. A document with no diagram carries no mermaid and no
+  // promise, and nothing here runs.
+  if (!window.mermaid && window.__mermaidReady) {
+    window.__mermaidReady.then(paintMermaid).catch(function (e) {
+      console.warn('mermaid failed to load', e);
+    });
+  }
 
   // ---------------------------------------------------------------- figure zoom view
   // The svg mermaid emits carries width="100%" plus an inline max-width, so inside an

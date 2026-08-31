@@ -2,7 +2,9 @@
 
 Use this to hand over analysis and design work. **Write one markdown file and bake it with a fixed shell.** Do not write HTML.
 
-The output is a single HTML file with no external requests (3.4MB, marked and mermaid inlined). It carries a table of contents on the left, three views (document, source, canvas), mermaid diagrams, a flow canvas you can rearrange, and a way to get the markdown back out. It opens the same way on a corporate network, offline, or uploaded to Slack.
+The output is a single HTML file with no external requests. It carries a table of contents on the left, three views (document, source, canvas), mermaid diagrams, a flow canvas you can rearrange, and a way to get the markdown back out. It opens the same way on a corporate network, offline, or uploaded to Slack.
+
+Only the mermaid a document draws goes into it. A document of flowcharts comes to about 900KB, one with no diagram to about 180KB.
 
 This directory is an open-package. The specification is `open-package spec`.
 
@@ -16,12 +18,13 @@ open-package verify                       # does it work here
 
 Leave `-o` out and the output lands next to the input under the same name (`flow.md` becomes `flow.html`).
 
-`setup` fetches marked 12.0.2 and mermaid 10.9.1 into `source/vendor/`. That is 3.2MB of someone else's code, so the package does not carry it. The versions and their sha256 are pinned, so the same bytes arrive wherever you fetch from. The shell inlines both files whole, so different bytes would change the output without saying so. What is fetched is not committed.
+`setup` fetches marked 12.0.2 and mermaid 10.9.1 into `source/vendor/`. That is someone else's code and it comes to 23MB unpacked, so the package does not carry it. The versions and their sha256 are pinned, so the same bytes arrive wherever you fetch from. Those bytes end up inside every document baked afterwards, so different ones would change the output without saying so. What is fetched is not committed.
 
 If a corporate network blocks the registry, do not work around it. Give it a mirror.
 
 ```
-ADOC_VENDOR_BASE=https://<mirror>/npm open-package setup
+ADOC_VENDOR_BASE=https://<mirror>/npm open-package setup       # marked
+ADOC_VENDOR_REGISTRY=https://<mirror> open-package setup       # mermaid
 ```
 
 Skip `setup` and `build` gives you the setup command instead of a stack trace.
@@ -67,8 +70,9 @@ The canvas follows the same rule. It is a window onto the document's diagrams ra
 | `document/SYNTAX.md` | Syntax SSoT. Every component and the canvas controls |
 | `document/EXAMPLE.md` | A working example of every component. The starting point for a new document |
 | `source/build.py` | The builder. Markdown plus shell into a single HTML. Standard library only |
+| `source/mermaid_slice.py` | Picks the mermaid modules a document needs out of the vendored dist |
 | `source/fetch-vendor.sh` | Fetches marked and mermaid. Pinned versions, sha256 checked |
-| `source/verify.sh` | Bakes the example and checks size, self containment, and leftover placeholders |
+| `source/verify.sh` | Bakes the example and checks size, slicing, self containment, and leftover placeholders |
 | `source/template.html` | The page skeleton. Placeholders and nothing else |
 | `source/app.js` | The runtime. Markdown preprocessing, component rendering, theme, flow canvas |
 | `source/style.css` | Design tokens and layout, light and dark |
