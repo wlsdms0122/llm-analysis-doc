@@ -25,9 +25,12 @@ import pathlib
 import re
 import sys
 
+import mermaid_slice
+
 # Resolved from this file's own location, so the same assets are picked up wherever the
 # package sits and wherever the call came from.
 HERE = pathlib.Path(__file__).resolve().parent
+VENDOR = HERE / "vendor"
 
 
 def read(p: pathlib.Path) -> str:
@@ -37,10 +40,34 @@ def read(p: pathlib.Path) -> str:
 def read_vendor(name: str) -> str:
     """vendor is not kept in the repository, so a missing file gets the next command
     rather than a stack trace."""
-    p = HERE / "vendor" / name
+    p = VENDOR / name
     if not p.exists():
         raise SystemExit(f"source/vendor/{name} is missing. run 'open-package setup' first.")
     return read(p)
+
+
+def mermaid_runtime(markdown: str) -> tuple[str, str]:
+    """The mermaid script for this document, and one line saying what went into it.
+
+    Only the diagram types the document draws are baked. A document with no diagram gets no
+    mermaid at all, which is most of the size of the output.
+    """
+    if not (VENDOR / "mermaid" / mermaid_slice.ENTRY).exists():
+        raise SystemExit("source/vendor/mermaid is missing. run 'open-package setup' first.")
+
+    prefixes, unknown = mermaid_slice.needed_prefixes(markdown)
+    if not prefixes and not unknown:
+        return "", "no diagram"
+
+    # A diagram type this build does not know is taken as a sign that the table is behind
+    # mermaid, not as a broken document. It gets the UMD bundle, which draws every type and
+    # is smaller than the modules for every type put together.
+    if unknown:
+        names = ", ".join(sorted(set(unknown)))
+        return mermaid_slice.bundle(VENDOR / "mermaid"), f"the whole of mermaid ({names} not recognised)"
+
+    modules = mermaid_slice.select(VENDOR / "mermaid", prefixes)
+    return mermaid_slice.runtime(VENDOR / "mermaid", modules), f"mermaid, {len(modules)} modules"
 
 
 def parse_frontmatter(src: str) -> dict:
@@ -70,9 +97,10 @@ def inline_js(text: str) -> str:
     return text.replace("</script", "<\\/script").replace("<!--", "<\\!--")
 
 
-def build(md_path: pathlib.Path, out_path: pathlib.Path) -> pathlib.Path:
+def build(md_path: pathlib.Path, out_path: pathlib.Path) -> tuple[pathlib.Path, str]:
     src = read(md_path)
     meta = parse_frontmatter(src)
+    mermaid, mermaid_note = mermaid_runtime(src)
 
     body = re.sub(r"^---\r?\n.*?\r?\n---\r?\n?", "", src, count=1, flags=re.S)
     first_h1 = re.search(r"^#\s+(.+)$", body, re.M)
@@ -100,7 +128,7 @@ def build(md_path: pathlib.Path, out_path: pathlib.Path) -> pathlib.Path:
             )
         ),
         "VENDOR_MARKED": inline_js(read_vendor("marked.min.js")),
-        "VENDOR_MERMAID": inline_js(read_vendor("mermaid.min.js")),
+        "VENDOR_MERMAID": inline_js(mermaid),
         "APP": inline_js(read(HERE / "app.js")),
     }
     # One pass. Substituting in sequence would let a `{{...}}` inside an already inserted
@@ -109,7 +137,7 @@ def build(md_path: pathlib.Path, out_path: pathlib.Path) -> pathlib.Path:
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(out, encoding="utf-8")
-    return out_path
+    return out_path, mermaid_note
 
 
 def main() -> int:
@@ -123,9 +151,9 @@ def main() -> int:
         return 1
 
     out = args.out or args.markdown.with_suffix(".html")
-    built = build(args.markdown, out)
+    built, note = build(args.markdown, out)
     size = built.stat().st_size / 1024 / 1024
-    print(f"{built}  ({size:.1f} MB)")
+    print(f"{built}  ({size:.1f} MB, {note})")
     return 0
 
 

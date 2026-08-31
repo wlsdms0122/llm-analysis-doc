@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{TITLE}}</title>
+<script>
+// The theme is applied here, before the shell paints, so a reader who chose dark does not
+// get a frame of light first. app.js owns the rest of the theme and reads the key from here.
+window.THEME_KEY = 'analysis-doc:theme';
+try {
+  var t = localStorage.getItem(window.THEME_KEY);
+  if (t) document.documentElement.setAttribute('data-theme', t);
+} catch (e) { }
+</script>
 <style>{{STYLE}}</style>
 </head>
 <body>

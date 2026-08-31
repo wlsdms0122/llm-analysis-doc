@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Fetches the vendor assets. They are 3.2MB of minified bundles, so the repository holds
-# this script instead of the files.
+# Fetches the vendor assets.
 #
 #   open-package setup
 #
-# Versions are pinned and checked against sha256. A mismatch fails and leaves nothing
-# behind. The shell inlines both files whole, so different bytes would change every
-# document baked afterwards without saying so.
+# marked arrives as one minified file. mermaid arrives as the npm tarball, because the
+# build picks single modules out of `dist/` rather than inlining one whole bundle.
+#
+# Both are pinned and checked against sha256. A mismatch fails and leaves nothing behind.
+# The bytes fetched here end up inside every document baked afterwards, so different bytes
+# would change those documents without saying so.
 set -euo pipefail
 
 # Resolved from this file's own location, so the assets land in the same place whatever
@@ -14,45 +16,80 @@ set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p vendor && cd vendor
 
-# name|version|url path|sha256
-ASSETS=(
-  "marked.min.js|12.0.2|marked@12.0.2/marked.min.js|15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894"
-  "mermaid.min.js|10.9.1|mermaid@10.9.1/dist/mermaid.min.js|61b335a46df05a7ce1c98378f60e5f3e77a7fb608a1056997e8a649304a936d6"
-)
+MARKED_VERSION=12.0.2
+MARKED_SHA=15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894
+
+MERMAID_VERSION=10.9.1
+MERMAID_SHA=370ad9d7815e5fb54a059efce9be436740b74849b6fcdff21d1565379c6cd073
 
 # A corporate network may block the public registries outright. A mirror goes here.
-BASES=(
+CDN_BASES=(
   "${ADOC_VENDOR_BASE:-}"
   "https://cdn.jsdelivr.net/npm"
   "https://unpkg.com"
 )
+REGISTRY="${ADOC_VENDOR_REGISTRY:-https://registry.npmjs.org}"
 
 sha() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1 || sha256sum "$1" | cut -d' ' -f1; }
 
-for a in "${ASSETS[@]}"; do
-  IFS='|' read -r name ver path want <<<"$a"
-
-  if [ -f "$name" ] && [ "$(sha "$name")" = "$want" ]; then
-    echo "$name ($ver) already here, skipping"
-    continue
-  fi
-
-  got=""
-  for base in "${BASES[@]}"; do
-    [ -z "$base" ] && continue
+# Downloads into a temporary file and only names it once the hash matches, so a partial or
+# wrong body never becomes the asset.
+fetch() {
+  local want="$1" out="$2" tmp
+  shift 2
+  for url in "$@"; do
+    [ -z "$url" ] && continue
     tmp="$(mktemp)"
-    if curl -fsSL --max-time 60 "$base/$path" -o "$tmp" && [ "$(sha "$tmp")" = "$want" ]; then
-      mv "$tmp" "$name"; got="$base"; break
+    if curl -fsSL --max-time 120 "$url" -o "$tmp" && [ "$(sha "$tmp")" = "$want" ]; then
+      mv "$tmp" "$out"
+      echo "$url"
+      return 0
     fi
     rm -f "$tmp"
   done
+  return 1
+}
 
-  if [ -z "$got" ]; then
-    echo "failed: $name ($ver). no source returned a file matching the hash." >&2
+# ---------------------------------------------------------------- marked
+
+if [ -f marked.min.js ] && [ "$(sha marked.min.js)" = "$MARKED_SHA" ]; then
+  echo "marked.min.js ($MARKED_VERSION) already here, skipping"
+else
+  urls=()
+  for base in "${CDN_BASES[@]}"; do
+    [ -n "$base" ] && urls+=("$base/marked@$MARKED_VERSION/marked.min.js")
+  done
+  if got=$(fetch "$MARKED_SHA" marked.min.js "${urls[@]}"); then
+    echo "marked.min.js ($MARKED_VERSION) <- $got"
+  else
+    echo "failed: marked $MARKED_VERSION. no source returned a file matching the hash." >&2
     echo "  if the network blocks them, pass a mirror as ADOC_VENDOR_BASE." >&2
     exit 1
   fi
-  echo "$name ($ver) ← $got"
-done
+fi
+
+# ---------------------------------------------------------------- mermaid
+
+# The stamp holds the hash of the tarball the current directory was extracted from, so a
+# version bump here re-extracts instead of leaving the old modules in place.
+if [ -f mermaid/.tarball-sha256 ] && [ "$(cat mermaid/.tarball-sha256)" = "$MERMAID_SHA" ]; then
+  echo "mermaid ($MERMAID_VERSION) already here, skipping"
+else
+  tgz="$(mktemp)"
+  trap 'rm -f "$tgz"' EXIT
+  if got=$(fetch "$MERMAID_SHA" "$tgz" "$REGISTRY/mermaid/-/mermaid-$MERMAID_VERSION.tgz"); then
+    rm -rf mermaid && mkdir mermaid
+    # The published tarball puts everything under `package/`. Only the modules are read, so
+    # the type declarations and the docs that come with them go straight back out.
+    tar xzf "$tgz" -C mermaid --strip-components=2 package/dist
+    find mermaid -mindepth 1 -maxdepth 1 ! -name '*.js' ! -name '*.mjs' -exec rm -rf {} +
+    echo "$MERMAID_SHA" > mermaid/.tarball-sha256
+    echo "mermaid ($MERMAID_VERSION) <- $got  ($(ls mermaid/*.js | wc -l | tr -d ' ') modules)"
+  else
+    echo "failed: mermaid $MERMAID_VERSION. the registry returned nothing matching the hash." >&2
+    echo "  if the network blocks it, pass a mirror as ADOC_VENDOR_REGISTRY." >&2
+    exit 1
+  fi
+fi
 
 echo "vendor ready."

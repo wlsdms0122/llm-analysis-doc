@@ -5,7 +5,7 @@ version = "1.0.0"
 
 [package]
 name = "analysis-doc"
-version = "1.0.0"
+version = "1.1.0"
 description = "Bakes one markdown file into a single HTML document with no external requests"
 requires = ["python3", "bash", "curl"]
 
