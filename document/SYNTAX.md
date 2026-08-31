@@ -51,7 +51,17 @@ All optional. Without `title`, the first `#` heading is used.
 
 ## Components
 
-Ordinary markdown (tables, code, quotes, lists) works as it is, and the following is added. The `:::` container and the fenced blocks are **shapes that live inside markdown syntax**, so an exported `.md` still reads as prose in another viewer. What that viewer will not dress up is the notation only this shell knows: ` ```canvas `, and the `:::` names.
+Ordinary markdown (tables, code, quotes, lists) works as it is, and the following is added.
+
+One markdown rule bites Korean harder than English. A closing `**` that sits straight after punctuation, with a letter and no space after it, does not close the emphasis:
+
+```
+**"원문"**을 보낸다              stays as asterisks
+**`prepareRegister`**를 부른다   stays as asterisks
+**서명 요청**을 보낸다            bold, since the closer follows a letter
+```
+
+English has the same rule (`**"like this"**then` does not close either) and meets it far less often, because a space usually sits where a Korean particle attaches. This is CommonMark rather than anything this shell does, so GitHub reads it the same way. Put the punctuation outside the emphasis and it works: `"**원문**"을 보낸다`. The `:::` container and the fenced blocks are **shapes that live inside markdown syntax**, so an exported `.md` still reads as prose in another viewer. What that viewer will not dress up is the notation only this shell knows: ` ```canvas `, and the `:::` names.
 
 ### Diagrams: ```mermaid
 
@@ -237,6 +247,7 @@ analysis-doc/
   manifest.toml             required runner version, package identity, commands. The only required file here
   README.md                 what this package is and when to use it
   document/SYNTAX.md        this document, the syntax SSoT
+  document/WRITING.md       how to analyse, how to structure the document, what tone to write in
   document/EXAMPLE.md       an example using every component
   source/build.py           the builder, standard library only, no dependencies
   source/mermaid_slice.py   picks the mermaid modules a document needs

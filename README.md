@@ -47,11 +47,7 @@ Everything inside a container uses the same syntax as the body, and containers n
 
 ## Writing the body
 
-- The first section is **one line of conclusion**. Evidence comes after
-- Attach measured coordinates to a claim: a file, a line number, an API path. A sentence without them is an impression
-- When something is in opposition, web against native or expected against actual, put it in a `:::compare`. Prose makes the reader draw the table in their head
-- Draw flow with `mermaid` `graph`. It goes on the flow canvas automatically, which puts the whole shape on one screen. Name the diagrams you intend to rearrange
-- Keep what is unconfirmed and what needs a decision at the end, on their own. Do not mix analysis with requests for judgement
+`document/WRITING.md` is the SSoT for how to analyse, how to arrange the document, and what to write it like. Read it before the first analysis, and use its closing checklist before handing one over.
 
 The markdown is **the original, not a discarded intermediate**. "Export MD" in the HTML hands back exactly that file, so keep both.
 
@@ -68,6 +64,7 @@ The canvas follows the same rule. It is a window onto the document's diagrams ra
 | path | what it is |
 |---|---|
 | `document/SYNTAX.md` | Syntax SSoT. Every component and the canvas controls |
+| `document/WRITING.md` | How to analyse, how to arrange the document, what tone to write in |
 | `document/EXAMPLE.md` | A working example of every component. The starting point for a new document |
 | `source/build.py` | The builder. Markdown plus shell into a single HTML. Standard library only |
 | `source/mermaid_slice.py` | Picks the mermaid modules a document needs out of the vendored dist |
