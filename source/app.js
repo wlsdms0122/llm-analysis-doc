@@ -537,6 +537,9 @@
       g.map[id].label = label;
       if (shape) g.map[id].shape = shape;
     }
+    // A node named before any subgraph and used inside one belongs to that subgraph. The
+    // first subgraph to name it keeps it, which is what mermaid draws.
+    if (group && !g.map[id].group) g.map[id].group = group;
     return id;
   }
 
@@ -544,29 +547,32 @@
 
   function parseGraph(src, seed) {
     var g = seed || { nodes: [], edges: [], map: {} };
-    var group = '';
+    // Subgraphs nest, so the open ones are a stack and a node belongs to the innermost one.
+    // Emptying the name at `end` takes the outer group off every member that follows it.
+    var open = [];
+    function group() { return open[open.length - 1] || ''; }
     src.split('\n').forEach(function (rawLine) {
       var line = rawLine.replace(/%%.*$/, '').trim();
       if (!line) return;
       if (/^(graph|flowchart)\b/i.test(line)) return;
       if (/^(classDef|class|style|linkStyle|click|direction)\b/i.test(line)) return;
       var sg = line.match(/^subgraph\s+(.+)$/i);
-      if (sg) { group = stripQuotes(sg[1].replace(/^[\w-]+\s*\[(.*)\]$/, '$1')).trim(); return; }
-      if (/^end$/i.test(line)) { group = ''; return; }
+      if (sg) { open.push(stripQuotes(sg[1].replace(/^[\w-]+\s*\[(.*)\]$/, '$1')).trim()); return; }
+      if (/^end$/i.test(line)) { open.pop(); return; }
 
       var re = /\s*(-{2,}>|-\.->|={2,}>|-{2,}|-\.-|={2,})\s*/g;
       var pieces = [], links = [], last = 0, m;
       while ((m = re.exec(line))) { pieces.push(line.slice(last, m.index)); links.push(m[0].trim()); last = m.index + m[0].length; }
       pieces.push(line.slice(last));
 
-      if (pieces.length === 1) { parseToken(pieces[0], g, group); return; }
+      if (pieces.length === 1) { parseToken(pieces[0], g, group()); return; }
 
       var prev = null;
       for (var i = 0; i < pieces.length; i++) {
         var piece = pieces[i], edgeLabel = '';
         var lm = piece.match(/^\s*\|([^|]*)\|\s*/);
         if (lm) { edgeLabel = stripQuotes(lm[1]); piece = piece.slice(lm[0].length); }
-        var id = parseToken(piece, g, group);
+        var id = parseToken(piece, g, group());
         if (id == null) {
           if (piece.trim() && prev != null) links[i] = piece.trim();
           continue;
