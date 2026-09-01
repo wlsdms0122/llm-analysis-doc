@@ -609,11 +609,6 @@
 
   var docEl = $('#doc');
   docEl.innerHTML = html;
-  // The title opens the panel, so the body does not open with it as well. The markdown keeps
-  // the heading and the export hands it back; this is the body dropping its first line.
-  if (docEl.firstElementChild && docEl.firstElementChild.tagName === 'H1') {
-    docEl.removeChild(docEl.firstElementChild);
-  }
   // The source view carries SRC as it is. Export and copy use the same value, so the three cannot disagree.
   $('#rawSrc').textContent = SRC;
 
