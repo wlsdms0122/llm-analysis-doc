@@ -27,6 +27,7 @@
     code: '<svg viewBox="0 0 16 16"><path d="M6 3L2 8l4 5"/><path d="M10 3l4 5-4 5"/></svg>',
     copy: '<svg viewBox="0 0 16 16"><rect x="5.5" y="1.5" width="9" height="9" rx="1.5"/><path d="M10.5 13.5h-8a1 1 0 01-1-1v-8"/></svg>',
     caret: '<svg viewBox="0 0 16 16" class="dd-caret"><path d="M4 6.5L8 10.5 12 6.5"/></svg>',
+    grip: '<svg viewBox="0 0 16 16" class="grip"><circle cx="6" cy="4" r="1.1"/><circle cx="10" cy="4" r="1.1"/><circle cx="6" cy="8" r="1.1"/><circle cx="10" cy="8" r="1.1"/><circle cx="6" cy="12" r="1.1"/><circle cx="10" cy="12" r="1.1"/></svg>',
     canvas: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="9.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="5.5" y="10" width="5" height="3.5" rx="1"/><path d="M4 6v2h8V6M8 8v2"/></svg>',
     chevronUp: '<svg viewBox="0 0 16 16"><path d="M4 10L8 6l4 4"/></svg>',
     chevronDown: '<svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>'
@@ -1769,6 +1770,10 @@
     // A node selection carries every picked node. The inspector still wants one, because
     // what it edits is one node's properties, so it answers only when one is picked.
     function selIds() { return sel && sel.t === 'node' ? sel.ids : []; }
+    function selGroup() { return sel && sel.t === 'group' ? sel.name : null; }
+    function groupIds(name) {
+      return g.nodes.filter(function (n) { return n.group === name; }).map(function (n) { return n.id; });
+    }
     function isSel(id) { return selIds().indexOf(id) >= 0; }
     function selNode() { return selIds().length === 1 ? nodeById(sel.ids[0]) : null; }
     function selEdge() { return sel && sel.t === 'edge' ? g.edges[sel.i] : null; }
@@ -1798,7 +1803,15 @@
     function focusSet() {
       if (!focusOn || !sel) return null;
       var keep = {};
-      if (sel.t === 'node') {
+      if (sel.t === 'group') {
+        groupIds(sel.name).forEach(function (id) {
+          keep[id] = 1;
+          g.edges.forEach(function (e) {
+            if (e.from === id) keep[e.to] = 1;
+            if (e.to === id) keep[e.from] = 1;
+          });
+        });
+      } else if (sel.t === 'node') {
         sel.ids.forEach(function (id) {
           keep[id] = 1;
           g.edges.forEach(function (e) {
@@ -1816,7 +1829,7 @@
     // The frame around a subgraph is the bounds of its members and nothing else. It has no
     // position of its own, so there is none to store and none to fall out of step with the
     // document: drag a member out and the frame follows it out.
-    var FRAME_PAD = 16, FRAME_HEAD = 21;
+    var FRAME_PAD = 16, FRAME_HEAD = 27;   // room for the tab that names the group
     function drawFrames() {
       $$('.cv-frame', world).forEach(function (el) { el.remove(); });
       var bounds = {};
@@ -1833,13 +1846,13 @@
       Object.keys(bounds).forEach(function (name) {
         var b = bounds[name];
         var el = document.createElement('div');
-        el.className = 'cv-frame';
+        el.className = 'cv-frame' + (selGroup() === name ? ' on' : '');
         el.dataset.group = name;
         el.style.left = (b.x1 - FRAME_PAD) + 'px';
         el.style.top = (b.y1 - FRAME_PAD - FRAME_HEAD) + 'px';
         el.style.width = (b.x2 - b.x1 + FRAME_PAD * 2) + 'px';
         el.style.height = (b.y2 - b.y1 + FRAME_PAD * 2 + FRAME_HEAD) + 'px';
-        el.innerHTML = '<span class="cv-frame-name">' + esc(name) + '</span>';
+        el.innerHTML = '<span class="cv-frame-name">' + ICON.grip + esc(name) + '</span>';
         // Behind the edges and the nodes, which is what the order in the world decides.
         world.insertBefore(el, world.firstChild);
       });
@@ -2587,11 +2600,14 @@
         var tag = e.target.closest('.cv-frame-name');
         if (tag) {
           e.stopPropagation(); e.preventDefault();
-          var group = tag.parentElement.dataset.group;
-          var mine = g.nodes.filter(function (n) { return n.group === group; }).map(function (n) { return n.id; });
+          var name = tag.parentElement.dataset.group;
+          var mine = groupIds(name);
           if (!mine.length) return;
-          sel = { t: 'node', ids: mine };
-          startDrag(mine[0], e);
+          // The group is what is picked, not the nodes in it. The frame carries the mark and
+          // the nodes stay as they are, which is the difference between focusing a subgraph
+          // and selecting everything inside it.
+          sel = { t: 'group', name: name };
+          startDrag(mine[0], e, mine);
           draw(); buildInspect();
           return;
         }
@@ -2618,12 +2634,12 @@
       });
 
       // Selection lives even when read only. *Looking* at properties is not editing. Only moving is blocked.
-      function startDrag(id, e) {
+      function startDrag(id, e, ids) {
         if (!editable()) return;
         document.body.classList.add('cv-dragging');
         drag = {
           on: true, id: id, sx: e.clientX, sy: e.clientY, moved: false,
-          from: selIds().map(function (k) { var n = nodeById(k); return { id: k, x: n.x, y: n.y }; })
+          from: (ids || selIds()).map(function (k) { var n = nodeById(k); return { id: k, x: n.x, y: n.y }; })
         };
       }
       window.addEventListener('mousemove', function (e) {
