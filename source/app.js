@@ -1739,6 +1739,37 @@
       return keep;
     }
 
+    // The frame around a subgraph is the bounds of its members and nothing else. It has no
+    // position of its own, so there is none to store and none to fall out of step with the
+    // document: drag a member out and the frame follows it out.
+    var FRAME_PAD = 16, FRAME_HEAD = 21;
+    function drawFrames() {
+      $$('.cv-frame', world).forEach(function (el) { el.remove(); });
+      var bounds = {};
+      g.nodes.forEach(function (n) {
+        if (!n.group) return;
+        var el = nodeEl(n.id);
+        if (!el || !el.offsetWidth) return;
+        var b = bounds[n.group] || (bounds[n.group] = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
+        b.x1 = Math.min(b.x1, n.x);
+        b.y1 = Math.min(b.y1, n.y);
+        b.x2 = Math.max(b.x2, n.x + el.offsetWidth);
+        b.y2 = Math.max(b.y2, n.y + el.offsetHeight);
+      });
+      Object.keys(bounds).forEach(function (name) {
+        var b = bounds[name];
+        var el = document.createElement('div');
+        el.className = 'cv-frame';
+        el.style.left = (b.x1 - FRAME_PAD) + 'px';
+        el.style.top = (b.y1 - FRAME_PAD - FRAME_HEAD) + 'px';
+        el.style.width = (b.x2 - b.x1 + FRAME_PAD * 2) + 'px';
+        el.style.height = (b.y2 - b.y1 + FRAME_PAD * 2 + FRAME_HEAD) + 'px';
+        el.innerHTML = '<span class="cv-frame-name">' + esc(name) + '</span>';
+        // Behind the edges and the nodes, which is what the order in the world decides.
+        world.insertBefore(el, world.firstChild);
+      });
+    }
+
     function draw() {
       world.style.transform = 'translate(' + view.tx + 'px,' + view.ty + 'px) scale(' + view.scale + ')';
       $('#cvZoomLabel').textContent = Math.round(view.scale * 100) + '%';
@@ -1759,6 +1790,7 @@
         world.appendChild(el);
         applyNodeStyle(el, n);
       });
+      drawFrames();
       requestAnimationFrame(function () { drawEdges(); drawMap(); });
     }
 
@@ -2467,7 +2499,7 @@
           }
           var el = nodeEl(drag.id);
           if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
-          drawEdges(); drawMap();
+          drawFrames(); drawEdges(); drawMap();
         }
       });
       window.addEventListener('mouseup', function () {

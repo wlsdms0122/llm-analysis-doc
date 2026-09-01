@@ -590,6 +590,19 @@ body.cv-dragging { cursor: grabbing; }
 .cv-node.cylinder { padding: 24px 18px 18px; min-width: 148px; }
 .cv-node.doublecircle { min-width: 124px; min-height: 124px; padding: 28px; }
 
+/* The frame a subgraph draws. It is a reading of where the members are, so it takes no
+   pointer: dragging across it pans the canvas as any empty place does. */
+.cv-frame {
+  position: absolute; z-index: 0; pointer-events: none;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+}
+.cv-frame-name {
+  position: absolute; left: 13px; top: 4px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute);
+}
+
 /* Left panel: the diagram list, in canvas mode. */
 .gl { padding: 10px; }
 .gl-kicker {
