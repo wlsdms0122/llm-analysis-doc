@@ -182,7 +182,7 @@ So the figure in the body (rendered by mermaid) and the one on the canvas are **
 
 A subgraph is laid out as one thing. The levels are taken on the graph with each group folded into a single unit, so a group holds a run of columns rather than being torn apart wherever the flow leaves it and comes back. Inside the run the members are levelled again among themselves, and the members hold the same rows across every column the group spans. What this costs is that a column is no longer the distance from the entry: a node the flow reaches late can stand early, in its group's run, with the edge running back to it. A document with no subgraph folds nothing, and the fold of a plain graph is the graph, so it lays out as it always did.
 
-A group draws a frame behind its members with its name on it. The frame is a reading of where the members are and holds nothing of its own, so it cannot fall out of step with the document: drag a member away and the frame follows it. It takes no pointer either, so dragging across it pans the canvas the way any empty place does. The **name** does take the pointer: it is the group's handle, and pressing it picks every member so the whole group drags together.
+A group draws a frame behind its members with its name on it. The frame is a reading of where the members are and holds nothing of its own, so it cannot fall out of step with the document: drag a member away and the frame follows it. It takes no pointer either, so dragging across it pans the canvas the way any empty place does. The **name** does take the pointer. It is drawn as a tab with a grip, since it is the one place on the frame that can be grabbed, and pressing it picks **the subgraph itself**: the frame takes the mark, the nodes inside it are left as they are, and dragging moves the whole group.
 
 Nesting is read but not drawn as containment. An inner subgraph is a group of its own next to the outer one rather than inside it.
 
@@ -223,7 +223,7 @@ Past 10 levels the layout is **folded like a snake** to fit the screen ratio, wi
 - **Save** (JSON) and **Load** hand the whole overlay around
 - **Reset** drops the current diagram's overlay alone and goes back to the document
 - **Show in doc** moves to the section this diagram sits in and highlights it
-- **Focus** keeps the selected nodes' one hop neighbours and dims the rest
+- **Focus** keeps the selected nodes' one hop neighbours and dims the rest. With a subgraph picked, it keeps the members and their neighbours
 - The inspector edits one node's properties, so it opens for **one** selection. With several picked it stays closed
 - The inspector collapses from the caret in its header. The x clears the selection
 
