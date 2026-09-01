@@ -174,11 +174,17 @@ The canvas does not render mermaid. **It reads nodes, edges, labels and shapes, 
 | node id and label | yes, as they are |
 | node shape `{}` `()` `[()]` `[/ /]` and the rest | yes, as the matching shape |
 | edge direction, label, dashes | yes |
-| `subgraph` | yes, as a group name only |
+| `subgraph` | yes, as membership. Nested subgraphs are read, and a node belongs to the innermost one holding it |
 | `graph TD` / `LR` direction | ignored. The canvas decides the layout |
 | `classDef` `style` `linkStyle` `click` | ignored. Colour and line come from the inspector |
 
 So the figure in the body (rendered by mermaid) and the one on the canvas are **the same structure laid out differently**. There is no need to think about the direction declaration.
+
+A subgraph is laid out as one thing. The levels are taken on the graph with each group folded into a single unit, so a group holds a run of columns rather than being torn apart wherever the flow leaves it and comes back. Inside the run the members are levelled again among themselves, and the members hold the same rows across every column the group spans. What this costs is that a column is no longer the distance from the entry: a node the flow reaches late can stand early, in its group's run, with the edge running back to it. A document with no subgraph folds nothing, and the fold of a plain graph is the graph, so it lays out as it always did.
+
+A group draws a frame behind its members with its name on it. The frame is a reading of where the members are and holds nothing of its own, so it cannot fall out of step with the document: drag a member away and the frame follows it. It takes no pointer either, so dragging across it pans the canvas the way any empty place does.
+
+Nesting is read but not drawn as containment. An inner subgraph is a group of its own next to the outer one rather than inside it.
 
 Layout is computed automatically with longest path layering and barycenter ordering. For edges, **all 16 combinations of the four sides on each end are scored** and the cheapest pair wins. The score is the distance between the two ports plus a penalty when the space in front of a port is blocked, and the penalty has two tiers: heavy when the target sits **behind** the port, light when it is in front but merely tight. No axis is fixed in advance, so **out the top and in the left** comes up too, which is the most natural thing for two nodes on a diagonal. A route leaves and arrives along the port normal, so the arrowhead angle matches the entry direction on its own.
 

@@ -190,7 +190,7 @@ body.nav-resizing .nav-handle-bar { background: var(--accent); height: 56px; }
 .toc a.lv1 { color: var(--fg); font-weight: 700; margin-top: 12px; }
 .toc a.lv1:first-child { margin-top: 0; }
 .toc a.lv3 { padding-left: 26px; font-size: 11.5px; }
-.toc a.lv4 { padding-left: 40px; font-size: 11px; color: var(--fg-faint); }
+.toc a.lv4 { padding-left: 40px; font-size: 11px; }
 .toc a.on { color: var(--accent); background: var(--accent-soft); border-left-color: var(--accent); }
 
 .nav-foot {
@@ -234,9 +234,9 @@ body.nav-resizing .nav-handle-bar { background: var(--accent); height: 56px; }
 }
 .doc h3 { font-size: 16px; font-weight: 700; letter-spacing: -.02em; margin: 32px 0 10px; }
 .doc h4 {
-  font-family: var(--mono); font-size: 11.5px; font-weight: 500;
-  letter-spacing: .1em; text-transform: uppercase; color: var(--fg-mute);
-  margin: 24px 0 8px;
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--fg);
+  margin: 26px 0 8px;
 }
 .doc p { margin: 13px 0; }
 .doc ul, .doc ol { margin: 13px 0; padding-left: 22px; }
@@ -551,7 +551,15 @@ body.cv-dragging { cursor: grabbing; }
 }
 .cv-node.sel:not(.shaped) { border-color: var(--accent) !important; }
 .cv-node.sel.shaped .cv-shape > * { stroke: var(--accent) !important; stroke-opacity: 1 !important; }
-.cv-node .cv-label, .cv-node .cv-sub { position: relative; z-index: 1; }
+/* A label with no space in it, an identifier or a URL, has nowhere to wrap and runs out of
+   the box the node draws. It is the document's text, so it breaks rather than being cut.
+   A shaped node lays its label out with flex, where the automatic minimum of an item is its
+   longest word. Left at that, the label keeps the width of the word and the break never
+   happens. */
+.cv-node .cv-label, .cv-node .cv-sub {
+  position: relative; z-index: 1;
+  overflow-wrap: break-word; min-width: 0; max-width: 100%;
+}
 .cv-node .cv-sub { font-size: 9.5px; color: var(--fg-faint); margin-top: 4px; letter-spacing: .06em; text-transform: uppercase; }
 
 /* Shapes drawn with a div. */
@@ -581,6 +589,19 @@ body.cv-dragging { cursor: grabbing; }
 .cv-node.trapezoid { padding: 13px 42px; min-width: 176px; }
 .cv-node.cylinder { padding: 24px 18px 18px; min-width: 148px; }
 .cv-node.doublecircle { min-width: 124px; min-height: 124px; padding: 28px; }
+
+/* The frame a subgraph draws. It is a reading of where the members are, so it takes no
+   pointer: dragging across it pans the canvas as any empty place does. */
+.cv-frame {
+  position: absolute; z-index: 0; pointer-events: none;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+}
+.cv-frame-name {
+  position: absolute; left: 13px; top: 4px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute);
+}
 
 /* Left panel: the diagram list, in canvas mode. */
 .gl { padding: 10px; }
