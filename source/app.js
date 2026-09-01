@@ -1400,7 +1400,8 @@
   var STORE_KEY = 'analysis-doc:' + (META.slug || 'doc') + ':overlay';
   var MAP_KEY = 'analysis-doc:' + (META.slug || 'doc') + ':map-folded';
   var SNAP_KEY = 'analysis-doc:' + (META.slug || 'doc') + ':snap';
-  var ROW_H = 116, COL_W = 275, ARROW_GAP = 7;   // COL_W has to clear the widest node (236)
+  var ROW_H = 116, COL_W = 275, ARROW_GAP = 7;   // a cell's worth of distance, for routing
+  var COL_GAP = 74, ROW_GAP = 46;               // what stands between measured nodes
   var BAND_GAP = 70, MIN_WRAP_COLS = 10;
 
   var canvas = (function () {
@@ -1615,28 +1616,86 @@
         rows = deepest + 1;
       }
 
+      // Which row each node stands on. Taking the position in the column, as it used to, puts
+      // a chain one row lower at every step: the second node of a two node column is row 1
+      // whether or not anything stands above it. A node takes the row of the median of what
+      // feeds it instead, and the column is then spread just enough to keep the order the
+      // crossing passes settled on. A chain of one parent to one child comes out straight.
+      var slot = {};
+      layers.forEach(function (L) { L.forEach(function (id, i) { slot[id] = i; }); });
+      if (!grouped) {
+        for (var mp = 0; mp < 4; mp++) {
+          var back = mp % 2 === 1;
+          var seq = [];
+          for (var sk = 0; sk <= maxL; sk++) seq.push(back ? maxL - sk : sk);
+          seq.forEach(function (li) {
+            var L = layers[li];
+            if (!L.length) return;
+            var want = L.map(function (id) {
+              var refs = inner.filter(function (e) {
+                return back ? (e.from === id && layer[e.to] === li + 1)
+                            : (e.to === id && layer[e.from] === li - 1);
+              }).map(function (e) { return slot[back ? e.to : e.from]; });
+              if (!refs.length) return slot[id];
+              refs.sort(function (a, b) { return a - b; });
+              var m = refs.length >> 1;
+              return refs.length % 2 ? refs[m] : (refs[m - 1] + refs[m]) / 2;
+            });
+            var floor = -Infinity;
+            L.forEach(function (id, i) {
+              floor = Math.max(want[i], floor + 1);
+              slot[id] = floor;
+            });
+          });
+        }
+        var low = Infinity, high = -Infinity;
+        nodes.forEach(function (n) { low = Math.min(low, slot[n.id]); high = Math.max(high, slot[n.id]); });
+        nodes.forEach(function (n) { slot[n.id] -= low; });
+        rows = high - low + 1;
+      }
+      function rowOf(id) { return grouped ? row[id] : slot[id]; }
+
+      // The cell is the measured content rather than the largest a node is allowed to be. A
+      // column of short labels no longer sits in the gap left for a long one.
+      var slotH = 0, wideW = 0;
+      nodes.forEach(function (n) { slotH = Math.max(slotH, n.h); wideW = Math.max(wideW, n.w); });
+      slotH += ROW_GAP;
+
       // A long thin stack of levels is folded like a snake. A 45 step pipeline laid out in one
       // row is an 8000px band with nothing readable in it. The band width is picked to land closest to the screen ratio (about 1.6).
-      var total = maxL + 1, bandCols = total, bandH = rows * ROW_H + BAND_GAP;
+      var total = maxL + 1, bandCols = total, bandH = rows * slotH + BAND_GAP;
       if (total > MIN_WRAP_COLS) {
         var best = Infinity;
         for (var c = 4; c <= total; c++) {
-          var w = c * COL_W, h = Math.ceil(total / c) * bandH;
+          var w = c * (wideW + COL_GAP), h = Math.ceil(total / c) * bandH;
           var score = Math.abs(w / h - 1.6);
           if (score < best) { best = score; bandCols = c; }
         }
       }
 
-      layers.forEach(function (L, li) {
+      function colOf(li) {
         var band = Math.floor(li / bandCols);
         // Odd bands run in reverse so the flow carries straight down where one band meets the next.
-        var col = band % 2 ? bandCols - 1 - (li % bandCols) : li % bandCols;
-        // A plain flow centres each column on the tallest one. Centring shifts a column by its
-        // own length, which is the one thing a reserved row cannot survive.
-        var off = grouped ? 0 : (rows - L.length) / 2;
-        L.forEach(function (id, i) {
-          ids[id].ax = 60 + col * COL_W;
-          ids[id].ay = 60 + band * bandH + (off + (grouped ? row[id] : i)) * ROW_H;
+        return band % 2 ? bandCols - 1 - (li % bandCols) : li % bandCols;
+      }
+
+      // Every band puts its first column at the same x, so the width of a column is the widest
+      // node standing in it in any band.
+      var colW = [], colX = [], run = 0;
+      for (var ci = 0; ci < bandCols; ci++) colW.push(0);
+      layers.forEach(function (L, li) {
+        L.forEach(function (id) { colW[colOf(li)] = Math.max(colW[colOf(li)], ids[id].w); });
+      });
+      for (ci = 0; ci < bandCols; ci++) { colX.push(run); run += colW[ci] + COL_GAP; }
+
+      layers.forEach(function (L, li) {
+        var band = Math.floor(li / bandCols), col = colOf(li);
+        // The rows are read across the whole graph rather than within one column, so a column
+        // is not centred on its own length. Centring it would undo the alignment above.
+        L.forEach(function (id) {
+          var n = ids[id];
+          n.ax = 60 + colX[col] + (colW[col] - n.w) / 2;
+          n.ay = 60 + band * bandH + rowOf(id) * slotH + (slotH - ROW_GAP - n.h) / 2;
         });
       });
     }
@@ -1660,6 +1719,7 @@
         return { id: n.id, label: n.label, shape: n.shape, group: n.group };
       });
 
+      measure(nodes);
       layout(nodes, edges);
 
       cur = i;
@@ -1777,24 +1837,49 @@
       });
     }
 
+    function nodeMarkup(n, extra) {
+      var el = document.createElement('div');
+      var shaped = !!SHAPE_SVG[n.shape];
+      el.className = 'cv-node ' + (n.shape || 'rect') + (shaped ? ' shaped' : '') + (extra || '');
+      el.dataset.id = n.id;
+      el.innerHTML =
+        (shaped ? '<svg class="cv-shape" viewBox="0 0 100 100" preserveAspectRatio="none">' + SHAPE_SVG[n.shape] + '</svg>' : '') +
+        '<div class="cv-label">' + esc(n.label) + '</div>';
+      applyNodeStyle(el, n);
+      return el;
+    }
+
+    // What a node comes out as on screen, read before the layout runs. The size depends on
+    // the label, the shape and the border the reader chose, so the only honest source is a
+    // real one laid out by the browser.
+    function measure(nodes) {
+      var pad = document.createElement('div');
+      pad.style.cssText = 'position:absolute;left:-99999px;top:0;visibility:hidden';
+      world.appendChild(pad);
+      nodes.forEach(function (n) {
+        var el = nodeMarkup(n);
+        pad.appendChild(el);
+        n.w = el.offsetWidth;
+        n.h = el.offsetHeight;
+      });
+      pad.remove();
+      // Measured while the canvas is off screen, everything comes back zero. The old fixed
+      // cell stands in, so a layout still comes out and is redone when the view opens.
+      var blind = nodes.some(function (n) { return !n.w; });
+      nodes.forEach(function (n) { if (!n.w) { n.w = 190; n.h = 44; } });
+      return !blind;
+    }
+
     function draw() {
       world.style.transform = 'translate(' + view.tx + 'px,' + view.ty + 'px) scale(' + view.scale + ')';
       $('#cvZoomLabel').textContent = Math.round(view.scale * 100) + '%';
       $$('.cv-node', world).forEach(function (el) { el.remove(); });
       var keep = focusSet();
       g.nodes.forEach(function (n) {
-        var el = document.createElement('div');
-        var shaped = !!SHAPE_SVG[n.shape];
-        el.className = 'cv-node ' + (n.shape || 'rect') + (shaped ? ' shaped' : '') +
-          (isSel(n.id) ? ' sel' : '') + (keep && !keep[n.id] ? ' dim' : '');
-        el.dataset.id = n.id;
+        var el = nodeMarkup(n, (isSel(n.id) ? ' sel' : '') + (keep && !keep[n.id] ? ' dim' : ''));
         el.style.left = n.x + 'px';
         el.style.top = n.y + 'px';
-        el.innerHTML =
-          (shaped ? '<svg class="cv-shape" viewBox="0 0 100 100" preserveAspectRatio="none">' + SHAPE_SVG[n.shape] + '</svg>' : '') +
-          '<div class="cv-label">' + esc(n.label) + '</div>';
         world.appendChild(el);
-        applyNodeStyle(el, n);
       });
       drawFrames();
       requestAnimationFrame(function () { drawEdges(); drawMap(); });
