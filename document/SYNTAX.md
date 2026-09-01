@@ -26,7 +26,7 @@ Labels (kicker, table headers, `####`, toolbars) are mono, uppercase, wide track
 |---|---|
 | top left | kicker, title, subtitle |
 | view switch | **Doc**, **Source** (the markdown as it is), **Canvas** |
-| left panel | In doc and source view, the contents (`#`, `##`, `###`, `####` collected automatically. The current position is highlighted, and pressing an entry from the source view goes back to the document and moves there). In canvas view, the diagram list and the inspector for the selected node or edge |
+| left panel | In doc and source view, the contents (`#`, `##`, `###`, `####` collected automatically. The current position is highlighted and the contents scroll to keep it in view, and pressing an entry from the source view goes back to the document and moves there). In canvas view, the diagram list and the inspector for the selected node or edge |
 | bottom left | Icon actions: download MD, copy MD, print. Theme toggle on the right (system, light, dark, showing the current state in the icon and its colour) |
 | right | The body, one vertical scroll |
 

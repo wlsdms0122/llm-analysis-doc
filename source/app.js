@@ -792,6 +792,20 @@
     }, 30);
     return true;
   }
+  // The contents are taller than the panel in any document of size, so the current entry has
+  // to be brought along. It moves only when the current entry changes, which leaves a reader
+  // scrolling the contents by hand alone until the body reaches a different section.
+  function reveal(a) {
+    if (!a) return;
+    // The margin decides how far past the edge to go, not whether to go. Reading it as the
+    // test would move the contents for an entry that is already on screen.
+    var link = a.getBoundingClientRect(), panel = toc.getBoundingClientRect(), margin = 40, d = 0;
+    if (link.top < panel.top) d = link.top - panel.top - margin;
+    else if (link.bottom > panel.bottom) d = link.bottom - panel.bottom + margin;
+    if (d) toc.scrollTo({ top: toc.scrollTop + d, behavior: 'smooth' });
+  }
+
+  var spied = -1;
   function spy() {
     var best = -1, bestTop = -1e9;
     heads.forEach(function (h, i) {
@@ -799,7 +813,10 @@
       if (top <= 0 && top > bestTop) { bestTop = top; best = i; }
     });
     if (best < 0) best = 0;
+    if (best === spied) return;
+    spied = best;
     links.forEach(function (a, i) { a.classList.toggle('on', i === best); });
+    reveal(links[best]);
   }
   main.addEventListener('scroll', function () {
     if (spy._r) return;
