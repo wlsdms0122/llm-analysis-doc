@@ -30,8 +30,6 @@ Labels (kicker, table headers, `####`, toolbars) are mono, uppercase, wide track
 | bottom left | Icon actions: download MD, copy MD, print. Theme toggle on the right (system, light, dark, showing the current state in the icon and its colour) |
 | right | The body, one vertical scroll |
 
-The title opens the panel, so the body does not open with it as well. A `#` at the very top of the document is left out of the body. The markdown keeps it, and the export and the source view hand it back.
-
 The theme is the reader's rather than the document's, so the choice is kept under one key for every analysis-doc and holds across all of them. It is applied in the `<head>`, before the shell paints, so opening a document in a stored dark does not start with a frame of light. Where the browser blocks storage the toggle still works and the choice lasts until the page is closed.
 
 Colours in a mermaid diagram are baked into the SVG, so they do not follow a CSS variable on their own. Changing the theme reinitialises with the tokens at that moment and redraws everything. A system theme change does the same.
