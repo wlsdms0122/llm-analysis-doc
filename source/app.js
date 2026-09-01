@@ -609,6 +609,11 @@
 
   var docEl = $('#doc');
   docEl.innerHTML = html;
+  // The title opens the panel, so the body does not open with it as well. The markdown keeps
+  // the heading and the export hands it back; this is the body dropping its first line.
+  if (docEl.firstElementChild && docEl.firstElementChild.tagName === 'H1') {
+    docEl.removeChild(docEl.firstElementChild);
+  }
   // The source view carries SRC as it is. Export and copy use the same value, so the three cannot disagree.
   $('#rawSrc').textContent = SRC;
 
@@ -626,8 +631,129 @@
     w.appendChild(t);
   });
 
+  // ---------------------------------------------------------------- table widths
+  // Markdown carries no widths, so the shell decides them. A table gets the width it wants
+  // up to what the window has, which is wider than the text column and is why the text in it
+  // stops wrapping. Over that the reader drags a column boundary; double click hands the
+  // table back to the measurement.
+  var COL_MIN = 56;
+
+  function docPad() {
+    var cs = getComputedStyle($('#doc'));
+    return parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  }
+
+  // The width at which nothing in the table wraps. Reading it means laying the table out at
+  // its intrinsic size for a moment, which is why the value is taken and the style dropped in
+  // the same statement pair rather than left on.
+  function wantedWidth(t) {
+    if (t.classList.contains('sized')) return parseFloat(t.style.width);
+    var prev = t.style.width;
+    t.style.width = 'max-content';
+    var nat = t.getBoundingClientRect().width;
+    t.style.width = prev;
+    return nat;
+  }
+
+  function fitTable(box) {
+    var t = $('table', box);
+    // Only a table that sits directly in the document may leave the column. Inside a callout
+    // or a comparison the column is that block's, and reaching past it would break the block.
+    // A hidden view measures zero, and a zero written here is a table with no width when the
+    // view comes back, so measuring waits until the document is on screen.
+    if (!t || box.parentElement !== $('#doc') || !box.offsetParent) return;
+    var pad = docPad();
+    var column = $('#doc').clientWidth - pad;
+    var room = $('#main').clientWidth - pad;
+    // The wrapper is a border box, so what the table gets is the width minus the wrapper's
+    // own border. Leave it out and the table is two pixels short and wraps at every measure.
+    var edge = box.offsetWidth - box.clientWidth;
+    box.style.setProperty('--table-w', Math.round(Math.max(column, Math.min(wantedWidth(t) + edge, room))) + 'px');
+  }
+
+  function fitTables() { $$('#doc .table-scroll').forEach(fitTable); }
+
+  // Turns the widths the browser chose into widths the table states, which is what makes one
+  // column movable without the others resettling.
+  function lockColumns(t) {
+    if (t.classList.contains('sized')) return;
+    var cells = $$('th, td', $('tr', t) || t);
+    if (!cells.length) return;
+    var group = document.createElement('colgroup'), total = 0;
+    cells.forEach(function (c) {
+      var w = Math.round(c.getBoundingClientRect().width);
+      total += w;
+      var col = document.createElement('col');
+      col.style.width = w + 'px';
+      group.appendChild(col);
+    });
+    t.insertBefore(group, t.firstChild);
+    t.style.width = total + 'px';
+    t.classList.add('sized');
+  }
+
+  function releaseColumns(t) {
+    var group = $('colgroup', t);
+    if (group) group.parentNode.removeChild(group);
+    t.style.width = '';
+    t.classList.remove('sized');
+  }
+
+  $$('#doc .table-scroll table').forEach(function (t) {
+    var head = $('thead tr', t) || $('tr', t);
+    if (!head) return;
+    $$('th', head).forEach(function (th, i) {
+      var g = document.createElement('span');
+      g.className = 'col-grip';
+      g.dataset.col = i;
+      g.title = 'Drag to resize the column, double click to undo';
+      th.appendChild(g);
+    });
+  });
+
+  (function () {
+    var drag = null;
+    document.addEventListener('mousedown', function (e) {
+      var g = e.target.closest && e.target.closest('.col-grip');
+      if (!g || e.button) return;
+      e.preventDefault();
+      var box = g.closest('.table-scroll'), t = $('table', box);
+      lockColumns(t);
+      var col = t.querySelectorAll('col')[Number(g.dataset.col)];
+      if (!col) return;
+      drag = { box: box, t: t, col: col, grip: g, x: e.clientX, w: parseFloat(col.style.width), total: parseFloat(t.style.width) };
+      g.classList.add('on');
+      document.body.classList.add('cv-dragging');
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      // The other columns keep their widths and the table takes the difference, so pulling a
+      // boundary moves that one boundary instead of reshuffling the whole row.
+      var w = Math.max(COL_MIN, drag.w + (e.clientX - drag.x));
+      drag.col.style.width = w + 'px';
+      drag.t.style.width = (drag.total + (w - drag.w)) + 'px';
+      fitTable(drag.box);
+    });
+    window.addEventListener('mouseup', function () {
+      if (!drag) return;
+      drag.grip.classList.remove('on');
+      document.body.classList.remove('cv-dragging');
+      drag = null;
+    });
+    document.addEventListener('dblclick', function (e) {
+      var g = e.target.closest && e.target.closest('.col-grip');
+      if (!g) return;
+      var box = g.closest('.table-scroll');
+      releaseColumns($('table', box));
+      fitTable(box);
+    });
+  })();
+
+  fitTables();
+  window.addEventListener('resize', fitTables);
+
   // ---------------------------------------------------------------- contents and scrollspy
-  var heads = $$('#doc h2, #doc h3, #doc h4');
+  var heads = $$('#doc h1, #doc h2, #doc h3, #doc h4');
   var toc = $('#toc'), seen = {};
   heads.forEach(function (h) {
     var base = slug(h.textContent), id = base;
@@ -666,6 +792,20 @@
     }, 30);
     return true;
   }
+  // The contents are taller than the panel in any document of size, so the current entry has
+  // to be brought along. It moves only when the current entry changes, which leaves a reader
+  // scrolling the contents by hand alone until the body reaches a different section.
+  function reveal(a) {
+    if (!a) return;
+    // The margin decides how far past the edge to go, not whether to go. Reading it as the
+    // test would move the contents for an entry that is already on screen.
+    var link = a.getBoundingClientRect(), panel = toc.getBoundingClientRect(), margin = 40, d = 0;
+    if (link.top < panel.top) d = link.top - panel.top - margin;
+    else if (link.bottom > panel.bottom) d = link.bottom - panel.bottom + margin;
+    if (d) toc.scrollTo({ top: toc.scrollTop + d, behavior: 'smooth' });
+  }
+
+  var spied = -1;
   function spy() {
     var best = -1, bestTop = -1e9;
     heads.forEach(function (h, i) {
@@ -673,7 +813,10 @@
       if (top <= 0 && top > bestTop) { bestTop = top; best = i; }
     });
     if (best < 0) best = 0;
+    if (best === spied) return;
+    spied = best;
     links.forEach(function (a, i) { a.classList.toggle('on', i === best); });
+    reveal(links[best]);
   }
   main.addEventListener('scroll', function () {
     if (spy._r) return;
@@ -918,6 +1061,9 @@
       target.classList.add('on');
       curView = v;
       if (v === 'canvas') canvas.ensure();
+      // The window may have changed size while the document was off screen, where a table
+      // cannot be measured.
+      if (v === 'doc') fitTables();
     }
 
     if (curView === v) { if (v === 'canvas') canvas.ensure(); return; }

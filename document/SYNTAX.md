@@ -26,11 +26,13 @@ Labels (kicker, table headers, `####`, toolbars) are mono, uppercase, wide track
 |---|---|
 | top left | kicker, title, subtitle |
 | view switch | **Doc**, **Source** (the markdown as it is), **Canvas** |
-| left panel | In doc and source view, the contents (`##`, `###`, `####` collected automatically, current position highlighted, and pressing one from the source view goes back to the document and moves there). In canvas view, the diagram list and the inspector for the selected node or edge |
+| left panel | In doc and source view, the contents (`#`, `##`, `###`, `####` collected automatically. The current position is highlighted and the contents scroll to keep it in view, and pressing an entry from the source view goes back to the document and moves there). In canvas view, the diagram list and the inspector for the selected node or edge |
 | bottom left | Icon actions: download MD, copy MD, print. Theme toggle on the right (system, light, dark, showing the current state in the icon and its colour) |
+| right | The body, one vertical scroll |
+
+The title opens the panel, so the body does not open with it as well. A `#` at the very top of the document is left out of the body. The markdown keeps it, and the export and the source view hand it back.
 
 The theme is the reader's rather than the document's, so the choice is kept under one key for every analysis-doc and holds across all of them. It is applied in the `<head>`, before the shell paints, so opening a document in a stored dark does not start with a frame of light. Where the browser blocks storage the toggle still works and the choice lasts until the page is closed.
-| right | The body, one vertical scroll |
 
 Colours in a mermaid diagram are baked into the SVG, so they do not follow a CSS variable on their own. Changing the theme reinitialises with the tokens at that moment and redraws everything. A system theme change does the same.
 
@@ -52,6 +54,8 @@ All optional. Without `title`, the first `#` heading is used.
 ## Components
 
 Ordinary markdown (tables, code, quotes, lists) works as it is, and the following is added.
+
+A table is measured at the width where none of its text wraps. If that is more than the text column it reaches past the column, up to what the window holds, and stays centred on it. Beyond that the reader drags a boundary in the header row: the column left of it takes the new width, the other columns keep theirs, and the table takes the difference. Double click a boundary and the table goes back to the measured widths. A table inside a callout or a comparison stays in that block and scrolls sideways instead. Nothing here is stored, and reopening the document measures again.
 
 One markdown rule bites Korean harder than English. A closing `**` that sits straight after punctuation, with a letter and no space after it, does not close the emphasis:
 
