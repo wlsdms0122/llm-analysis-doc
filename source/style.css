@@ -186,6 +186,9 @@ body.nav-resizing .nav-handle-bar { background: var(--accent); height: 56px; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .toc a:hover { background: var(--bg-sunken); color: var(--fg); }
+/* A `#` in the body sits above the sections, so it carries more weight than one of them. */
+.toc a.lv1 { color: var(--fg); font-weight: 700; margin-top: 12px; }
+.toc a.lv1:first-child { margin-top: 0; }
 .toc a.lv3 { padding-left: 26px; font-size: 11.5px; }
 .toc a.lv4 { padding-left: 40px; font-size: 11px; color: var(--fg-faint); }
 .toc a.on { color: var(--accent); background: var(--accent-soft); border-left-color: var(--accent); }
