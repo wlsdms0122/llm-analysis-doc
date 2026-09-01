@@ -25,6 +25,7 @@
     moon: '<svg viewBox="0 0 16 16"><path d="M13.5 9.6A5.8 5.8 0 016.4 2.5a5.8 5.8 0 107.1 7.1z"/></svg>',
     auto: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 010 11z" fill="currentColor" stroke="none"/></svg>',
     code: '<svg viewBox="0 0 16 16"><path d="M6 3L2 8l4 5"/><path d="M10 3l4 5-4 5"/></svg>',
+    copy: '<svg viewBox="0 0 16 16"><rect x="5.5" y="1.5" width="9" height="9" rx="1.5"/><path d="M10.5 13.5h-8a1 1 0 01-1-1v-8"/></svg>',
     caret: '<svg viewBox="0 0 16 16" class="dd-caret"><path d="M4 6.5L8 10.5 12 6.5"/></svg>',
     canvas: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="9.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="5.5" y="10" width="5" height="3.5" rx="1"/><path d="M4 6v2h8V6M8 8v2"/></svg>',
     chevronUp: '<svg viewBox="0 0 16 16"><path d="M4 10L8 6l4 4"/></svg>',
@@ -456,6 +457,7 @@
         '<button class="zoom-only" data-act="zin" title="Zoom in">' + ICON.zoomIn + '</button>' +
         '<button class="zoom-only" data-act="zfit" title="Fit">' + ICON.fit + '</button>' +
         '<button data-act="src" title="Show the mermaid source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the mermaid source">' + ICON.copy + '</button>' +
         '<button data-act="svg" title="Download the SVG">' + ICON.download + '</button>' +
         '<button data-act="zoom" title="Enlarge">' + ICON.expand + '</button>' +
       '</div>' +
@@ -472,6 +474,7 @@
         '<span class="sp"></span>' +
         '<button data-act="canvas" data-gi="' + gi + '" title="Show on the flow canvas">' + ICON.canvas + '</button>' +
         '<button data-act="src" title="Show the mermaid source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the mermaid source">' + ICON.copy + '</button>' +
       '</div>' +
       '<div class="figure-body"><pre class="mermaid-src"><code>' + esc(src) + '</code></pre></div></div>';
   }
@@ -991,6 +994,11 @@
         btn.classList.toggle('on', showing);
         btn.title = showing ? 'Show the diagram' : 'Show the mermaid source';
       }
+      else if (act === 'copysrc') {
+        copyText($('.mermaid-src', fig).textContent).then(
+          function () { toast('mermaid source copied'); },
+          function () { toast('copy failed'); });
+      }
       else if (act === 'svg') exportFigureSVG(fig);
       else if (act === 'canvas') { setView('canvas'); canvas.open(Number(btn.dataset.gi)); }
       return;
@@ -1400,7 +1408,8 @@
   var STORE_KEY = 'analysis-doc:' + (META.slug || 'doc') + ':overlay';
   var MAP_KEY = 'analysis-doc:' + (META.slug || 'doc') + ':map-folded';
   var SNAP_KEY = 'analysis-doc:' + (META.slug || 'doc') + ':snap';
-  var ROW_H = 116, COL_W = 275, ARROW_GAP = 7;   // COL_W has to clear the widest node (236)
+  var ROW_H = 116, COL_W = 275, ARROW_GAP = 7;   // a cell's worth of distance, for routing
+  var COL_GAP = 74, ROW_GAP = 46;               // what stands between measured nodes
   var BAND_GAP = 70, MIN_WRAP_COLS = 10;
 
   var canvas = (function () {
@@ -1615,28 +1624,86 @@
         rows = deepest + 1;
       }
 
+      // Which row each node stands on. Taking the position in the column, as it used to, puts
+      // a chain one row lower at every step: the second node of a two node column is row 1
+      // whether or not anything stands above it. A node takes the row of the median of what
+      // feeds it instead, and the column is then spread just enough to keep the order the
+      // crossing passes settled on. A chain of one parent to one child comes out straight.
+      var slot = {};
+      layers.forEach(function (L) { L.forEach(function (id, i) { slot[id] = i; }); });
+      if (!grouped) {
+        for (var mp = 0; mp < 4; mp++) {
+          var back = mp % 2 === 1;
+          var seq = [];
+          for (var sk = 0; sk <= maxL; sk++) seq.push(back ? maxL - sk : sk);
+          seq.forEach(function (li) {
+            var L = layers[li];
+            if (!L.length) return;
+            var want = L.map(function (id) {
+              var refs = inner.filter(function (e) {
+                return back ? (e.from === id && layer[e.to] === li + 1)
+                            : (e.to === id && layer[e.from] === li - 1);
+              }).map(function (e) { return slot[back ? e.to : e.from]; });
+              if (!refs.length) return slot[id];
+              refs.sort(function (a, b) { return a - b; });
+              var m = refs.length >> 1;
+              return refs.length % 2 ? refs[m] : (refs[m - 1] + refs[m]) / 2;
+            });
+            var floor = -Infinity;
+            L.forEach(function (id, i) {
+              floor = Math.max(want[i], floor + 1);
+              slot[id] = floor;
+            });
+          });
+        }
+        var low = Infinity, high = -Infinity;
+        nodes.forEach(function (n) { low = Math.min(low, slot[n.id]); high = Math.max(high, slot[n.id]); });
+        nodes.forEach(function (n) { slot[n.id] -= low; });
+        rows = high - low + 1;
+      }
+      function rowOf(id) { return grouped ? row[id] : slot[id]; }
+
+      // The cell is the measured content rather than the largest a node is allowed to be. A
+      // column of short labels no longer sits in the gap left for a long one.
+      var slotH = 0, wideW = 0;
+      nodes.forEach(function (n) { slotH = Math.max(slotH, n.h); wideW = Math.max(wideW, n.w); });
+      slotH += ROW_GAP;
+
       // A long thin stack of levels is folded like a snake. A 45 step pipeline laid out in one
       // row is an 8000px band with nothing readable in it. The band width is picked to land closest to the screen ratio (about 1.6).
-      var total = maxL + 1, bandCols = total, bandH = rows * ROW_H + BAND_GAP;
+      var total = maxL + 1, bandCols = total, bandH = rows * slotH + BAND_GAP;
       if (total > MIN_WRAP_COLS) {
         var best = Infinity;
         for (var c = 4; c <= total; c++) {
-          var w = c * COL_W, h = Math.ceil(total / c) * bandH;
+          var w = c * (wideW + COL_GAP), h = Math.ceil(total / c) * bandH;
           var score = Math.abs(w / h - 1.6);
           if (score < best) { best = score; bandCols = c; }
         }
       }
 
-      layers.forEach(function (L, li) {
+      function colOf(li) {
         var band = Math.floor(li / bandCols);
         // Odd bands run in reverse so the flow carries straight down where one band meets the next.
-        var col = band % 2 ? bandCols - 1 - (li % bandCols) : li % bandCols;
-        // A plain flow centres each column on the tallest one. Centring shifts a column by its
-        // own length, which is the one thing a reserved row cannot survive.
-        var off = grouped ? 0 : (rows - L.length) / 2;
-        L.forEach(function (id, i) {
-          ids[id].ax = 60 + col * COL_W;
-          ids[id].ay = 60 + band * bandH + (off + (grouped ? row[id] : i)) * ROW_H;
+        return band % 2 ? bandCols - 1 - (li % bandCols) : li % bandCols;
+      }
+
+      // Every band puts its first column at the same x, so the width of a column is the widest
+      // node standing in it in any band.
+      var colW = [], colX = [], run = 0;
+      for (var ci = 0; ci < bandCols; ci++) colW.push(0);
+      layers.forEach(function (L, li) {
+        L.forEach(function (id) { colW[colOf(li)] = Math.max(colW[colOf(li)], ids[id].w); });
+      });
+      for (ci = 0; ci < bandCols; ci++) { colX.push(run); run += colW[ci] + COL_GAP; }
+
+      layers.forEach(function (L, li) {
+        var band = Math.floor(li / bandCols), col = colOf(li);
+        // The rows are read across the whole graph rather than within one column, so a column
+        // is not centred on its own length. Centring it would undo the alignment above.
+        L.forEach(function (id) {
+          var n = ids[id];
+          n.ax = 60 + colX[col] + (colW[col] - n.w) / 2;
+          n.ay = 60 + band * bandH + rowOf(id) * slotH + (slotH - ROW_GAP - n.h) / 2;
         });
       });
     }
@@ -1660,6 +1727,7 @@
         return { id: n.id, label: n.label, shape: n.shape, group: n.group };
       });
 
+      measure(nodes);
       layout(nodes, edges);
 
       cur = i;
@@ -1698,7 +1766,11 @@
     function nodeById(id) { for (var i = 0; i < g.nodes.length; i++) if (g.nodes[i].id === id) return g.nodes[i]; return null; }
     function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
     function nodeEl(id) { return $('.cv-node[data-id="' + cssEsc(id) + '"]', world); }
-    function selNode() { return sel && sel.t === 'node' ? nodeById(sel.id) : null; }
+    // A node selection carries every picked node. The inspector still wants one, because
+    // what it edits is one node's properties, so it answers only when one is picked.
+    function selIds() { return sel && sel.t === 'node' ? sel.ids : []; }
+    function isSel(id) { return selIds().indexOf(id) >= 0; }
+    function selNode() { return selIds().length === 1 ? nodeById(sel.ids[0]) : null; }
     function selEdge() { return sel && sel.t === 'edge' ? g.edges[sel.i] : null; }
 
     function applyNodeStyle(el, n) {
@@ -1727,10 +1799,12 @@
       if (!focusOn || !sel) return null;
       var keep = {};
       if (sel.t === 'node') {
-        keep[sel.id] = 1;
-        g.edges.forEach(function (e) {
-          if (e.from === sel.id) keep[e.to] = 1;
-          if (e.to === sel.id) keep[e.from] = 1;
+        sel.ids.forEach(function (id) {
+          keep[id] = 1;
+          g.edges.forEach(function (e) {
+            if (e.from === id) keep[e.to] = 1;
+            if (e.to === id) keep[e.from] = 1;
+          });
         });
       } else {
         var e = g.edges[sel.i];
@@ -1760,6 +1834,7 @@
         var b = bounds[name];
         var el = document.createElement('div');
         el.className = 'cv-frame';
+        el.dataset.group = name;
         el.style.left = (b.x1 - FRAME_PAD) + 'px';
         el.style.top = (b.y1 - FRAME_PAD - FRAME_HEAD) + 'px';
         el.style.width = (b.x2 - b.x1 + FRAME_PAD * 2) + 'px';
@@ -1770,25 +1845,49 @@
       });
     }
 
+    function nodeMarkup(n, extra) {
+      var el = document.createElement('div');
+      var shaped = !!SHAPE_SVG[n.shape];
+      el.className = 'cv-node ' + (n.shape || 'rect') + (shaped ? ' shaped' : '') + (extra || '');
+      el.dataset.id = n.id;
+      el.innerHTML =
+        (shaped ? '<svg class="cv-shape" viewBox="0 0 100 100" preserveAspectRatio="none">' + SHAPE_SVG[n.shape] + '</svg>' : '') +
+        '<div class="cv-label">' + esc(n.label) + '</div>';
+      applyNodeStyle(el, n);
+      return el;
+    }
+
+    // What a node comes out as on screen, read before the layout runs. The size depends on
+    // the label, the shape and the border the reader chose, so the only honest source is a
+    // real one laid out by the browser.
+    function measure(nodes) {
+      var pad = document.createElement('div');
+      pad.style.cssText = 'position:absolute;left:-99999px;top:0;visibility:hidden';
+      world.appendChild(pad);
+      nodes.forEach(function (n) {
+        var el = nodeMarkup(n);
+        pad.appendChild(el);
+        n.w = el.offsetWidth;
+        n.h = el.offsetHeight;
+      });
+      pad.remove();
+      // Measured while the canvas is off screen, everything comes back zero. The old fixed
+      // cell stands in, so a layout still comes out and is redone when the view opens.
+      var blind = nodes.some(function (n) { return !n.w; });
+      nodes.forEach(function (n) { if (!n.w) { n.w = 190; n.h = 44; } });
+      return !blind;
+    }
+
     function draw() {
       world.style.transform = 'translate(' + view.tx + 'px,' + view.ty + 'px) scale(' + view.scale + ')';
       $('#cvZoomLabel').textContent = Math.round(view.scale * 100) + '%';
       $$('.cv-node', world).forEach(function (el) { el.remove(); });
-      var selId = sel && sel.t === 'node' ? sel.id : null;
       var keep = focusSet();
       g.nodes.forEach(function (n) {
-        var el = document.createElement('div');
-        var shaped = !!SHAPE_SVG[n.shape];
-        el.className = 'cv-node ' + (n.shape || 'rect') + (shaped ? ' shaped' : '') +
-          (selId === n.id ? ' sel' : '') + (keep && !keep[n.id] ? ' dim' : '');
-        el.dataset.id = n.id;
+        var el = nodeMarkup(n, (isSel(n.id) ? ' sel' : '') + (keep && !keep[n.id] ? ' dim' : ''));
         el.style.left = n.x + 'px';
         el.style.top = n.y + 'px';
-        el.innerHTML =
-          (shaped ? '<svg class="cv-shape" viewBox="0 0 100 100" preserveAspectRatio="none">' + SHAPE_SVG[n.shape] + '</svg>' : '') +
-          '<div class="cv-label">' + esc(n.label) + '</div>';
         world.appendChild(el);
-        applyNodeStyle(el, n);
       });
       drawFrames();
       requestAnimationFrame(function () { drawEdges(); drawMap(); });
@@ -2069,13 +2168,13 @@
       });
       var defs = '', parts = '', hits = '';
       var selI = sel && sel.t === 'edge' ? sel.i : -1;
-      var selNodeId = sel && sel.t === 'node' ? sel.id : null;
+
       var keep = focusSet();
 
       g.edges.forEach(function (e, i) {
         var a = nodeById(e.from), b = nodeById(e.to);
         if (!a || !b) return;
-        var hl = i === selI || (selNodeId && (e.from === selNodeId || e.to === selNodeId));
+        var hl = i === selI || isSel(e.from) || isSel(e.to);
         var dim = keep && !(keep[e.from] && keep[e.to]);
         var color = hl ? 'var(--accent)' : (e.color || 'var(--line-strong)');
         var p = edgePath(a, b, box[e.from], box[e.to], i, e.route || 'auto');
@@ -2307,8 +2406,6 @@
       var lineC = css.getPropertyValue('--fg-faint').trim() || '#888';
       var nodeC = css.getPropertyValue('--fg-mute').trim() || '#666';
       var accent = css.getPropertyValue('--accent').trim() || '#4a9eff';
-      var selId = sel && sel.t === 'node' ? sel.id : null;
-
       var at = {};
       g.nodes.forEach(function (n) {
         var el = nodeEl(n.id);
@@ -2332,7 +2429,7 @@
 
       ctx.globalAlpha = 1;
       g.nodes.forEach(function (n) {
-        var p = at[n.id], on = selId === n.id;
+        var p = at[n.id], on = isSel(n.id);
         ctx.fillStyle = on ? accent : (p.bg || nodeC);
         ctx.globalAlpha = on ? 1 : (p.bg ? .9 : .55);
         ctx.fillRect(p.x, p.y, p.w, p.h);
@@ -2451,8 +2548,27 @@
       var panning = false, sx = 0, sy = 0, otx = 0, oty = 0, moved = false;
       var drag = { on: false };
 
+      // Shift and a drag over empty canvas picks everything the box touches. Without the
+      // shift the same drag pans, which is the older and more common of the two.
+      var band = null;
+      function bandRect(e) {
+        var r = stage.getBoundingClientRect();
+        return {
+          left: Math.min(band.x, e.clientX), top: Math.min(band.y, e.clientY),
+          right: Math.max(band.x, e.clientX), bottom: Math.max(band.y, e.clientY), host: r
+        };
+      }
       stage.addEventListener('mousedown', function (e) {
         if (e.target.closest('.cv-node') || e.target.closest('.hit') || e.target.closest('.cv-inspect')) return;
+        if (e.target.closest('.cv-frame-name')) return;
+        if (e.shiftKey) {
+          band = { x: e.clientX, y: e.clientY, el: document.createElement('div') };
+          band.el.className = 'cv-band';
+          stage.appendChild(band.el);
+          document.body.classList.add('cv-dragging');
+          e.preventDefault();
+          return;
+        }
         panning = true; moved = false; stage.classList.add('panning');
         document.body.classList.add('cv-dragging');
         sx = e.clientX; sy = e.clientY; otx = view.tx; oty = view.ty;
@@ -2466,21 +2582,58 @@
           draw(); buildInspect();
           return;
         }
+        // The name on a subgraph frame is the handle for the whole group. The frame itself
+        // takes no pointer, so dragging across it still pans.
+        var tag = e.target.closest('.cv-frame-name');
+        if (tag) {
+          e.stopPropagation(); e.preventDefault();
+          var group = tag.parentElement.dataset.group;
+          var mine = g.nodes.filter(function (n) { return n.group === group; }).map(function (n) { return n.id; });
+          if (!mine.length) return;
+          sel = { t: 'node', ids: mine };
+          startDrag(mine[0], e);
+          draw(); buildInspect();
+          return;
+        }
         var el = e.target.closest('.cv-node');
         if (!el) return;
         e.stopPropagation(); e.preventDefault();
-        sel = { t: 'node', id: el.dataset.id };
-        // Selection lives even when read only. *Looking* at properties is not editing. Only moving is blocked.
-        if (editable()) {
-          document.body.classList.add('cv-dragging');
-          var n = nodeById(sel.id);
-          drag = { on: true, id: sel.id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y };
+        var id = el.dataset.id;
+        // Shift picks one more, or drops one already picked. It never starts a drag, so a
+        // selection can be built up without the nodes moving under the pointer.
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          var ids = selIds().slice(), was = ids.indexOf(id);
+          if (was >= 0) ids.splice(was, 1); else ids.push(id);
+          sel = ids.length ? { t: 'node', ids: ids } : null;
+          draw(); buildInspect();
+          return;
         }
+        // Pressing one that is already picked keeps the rest, which is what makes a group of
+        // them draggable. Released without moving, it falls back to that one alone.
+        if (!isSel(id)) sel = { t: 'node', ids: [id] };
+        startDrag(id, e);
         // Redrawn through draw(). Swapping the sel class alone leaves focus dimming on the old selection
         draw();
         buildInspect();
       });
+
+      // Selection lives even when read only. *Looking* at properties is not editing. Only moving is blocked.
+      function startDrag(id, e) {
+        if (!editable()) return;
+        document.body.classList.add('cv-dragging');
+        drag = {
+          on: true, id: id, sx: e.clientX, sy: e.clientY, moved: false,
+          from: selIds().map(function (k) { var n = nodeById(k); return { id: k, x: n.x, y: n.y }; })
+        };
+      }
       window.addEventListener('mousemove', function (e) {
+        if (band) {
+          var r = bandRect(e);
+          band.el.style.left = (r.left - r.host.left) + 'px';
+          band.el.style.top = (r.top - r.host.top) + 'px';
+          band.el.style.width = (r.right - r.left) + 'px';
+          band.el.style.height = (r.bottom - r.top) + 'px';
+        }
         if (panning) {
           if (Math.abs(e.clientX - sx) > 3 || Math.abs(e.clientY - sy) > 3) moved = true;
           view.tx = otx + (e.clientX - sx); view.ty = oty + (e.clientY - sy);
@@ -2488,33 +2641,59 @@
           syncMapVp();
         }
         if (drag.on) {
-          var n = nodeById(drag.id);
-          var rx = drag.ox + (e.clientX - drag.sx) / view.scale;
-          var ry = drag.oy + (e.clientY - drag.sy) / view.scale;
+          var lead = null;
+          drag.from.forEach(function (f) { if (f.id === drag.id) lead = f; });
+          var rx = lead.x + (e.clientX - drag.sx) / view.scale;
+          var ry = lead.y + (e.clientY - drag.sy) / view.scale;
+          if (Math.abs(e.clientX - drag.sx) > 2 || Math.abs(e.clientY - drag.sy) > 2) drag.moved = true;
           if (snapOn) {
             var sp = snapPos(drag.id, rx, ry);
-            n.x = sp.x; n.y = sp.y; guides = { v: sp.v, h: sp.h };
+            rx = sp.x; ry = sp.y; guides = { v: sp.v, h: sp.h };
           } else {
-            n.x = rx; n.y = ry; guides = { v: null, h: null };
+            guides = { v: null, h: null };
           }
-          var el = nodeEl(drag.id);
-          if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+          // The one under the pointer decides the step and the rest of the picked nodes take
+          // the same one, so what was picked keeps its shape.
+          var dx = rx - lead.x, dy = ry - lead.y;
+          drag.from.forEach(function (f) {
+            var n = nodeById(f.id);
+            n.x = f.x + dx; n.y = f.y + dy;
+            var el = nodeEl(f.id);
+            if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+          });
           drawFrames(); drawEdges(); drawMap();
         }
       });
-      window.addEventListener('mouseup', function () {
+      window.addEventListener('mouseup', function (e) {
         document.body.classList.remove('cv-dragging');
+        if (band) {
+          var r = bandRect(e);
+          var hits = [];
+          g.nodes.forEach(function (n) {
+            var el = nodeEl(n.id);
+            if (!el) return;
+            var b = el.getBoundingClientRect();
+            if (b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom) hits.push(n.id);
+          });
+          band.el.remove();
+          band = null;
+          sel = hits.length ? { t: 'node', ids: hits } : null;
+          draw(); buildInspect();
+        }
         if (panning) {
           panning = false; stage.classList.remove('panning');
           if (!moved && sel) { sel = null; draw(); buildInspect(); }
           persistView();
         }
         if (drag.on) {
-          var n = nodeById(drag.id);
-          var o = nodeOv(drag.id);
-          o.x = n.x; o.y = n.y;
+          drag.from.forEach(function (f) {
+            var n = nodeById(f.id), o = nodeOv(f.id);
+            o.x = n.x; o.y = n.y;
+          });
+          var picked = drag.id, still = drag.moved;
           drag.on = false; saveOverlay();
           guides = { v: null, h: null };
+          if (!still && selIds().length > 1) { sel = { t: 'node', ids: [picked] }; draw(); buildInspect(); }
           drawEdges();
         }
       });
