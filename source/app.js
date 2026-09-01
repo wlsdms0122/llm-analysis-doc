@@ -1446,21 +1446,18 @@
     function edgeOv(k) { var s = slot(); return (s.edges[k] = s.edges[k] || {}); }
     function edgeKey(e) { return e.from + '\u2192' + e.to + '#' + e.ord; }
 
-    // ---- layout (for nodes the overlay has no position for)
-    function layout(nodes, edges) {
-      var ids = {}; nodes.forEach(function (n) { ids[n.id] = n; });
-      var inner = edges.filter(function (e) { return ids[e.from] && ids[e.to]; });
-
-    // Back edges are left out of the level calculation. A cycle in the document, a failure
-    // looping back into the entry for instance, makes longest path relaxation push levels
-    // out without end and the canvas blows up. The edges are still drawn. Only the levels come from the acyclic subgraph.
+    // How far along the flow each key sits. Back edges are left out. A cycle in the document,
+    // a failure looping back into the entry for instance, makes longest path relaxation push
+    // levels out without end and the canvas blows up. The edges are still drawn. Only the
+    // levels come from the acyclic subgraph.
+    function levels(keys, links) {
       var out = {};
-      inner.forEach(function (e) { (out[e.from] = out[e.from] || []).push(e); });
+      links.forEach(function (e) { (out[e.from] = out[e.from] || []).push(e); });
       var mark = {}, isBack = {};
-      nodes.forEach(function (n) {
-        if (mark[n.id]) return;
-        var stack = [{ id: n.id, i: 0 }];
-        mark[n.id] = 1;
+      keys.forEach(function (k) {
+        if (mark[k]) return;
+        var stack = [{ id: k, i: 0 }];
+        mark[k] = 1;
         while (stack.length) {
           var top = stack[stack.length - 1];
           var es = out[top.id] || [];
@@ -1470,25 +1467,79 @@
           if (!mark[e.to]) { mark[e.to] = 1; stack.push({ id: e.to, i: 0 }); }
         }
       });
-      var acyclic = inner.filter(function (e) { return !isBack[e.from + '\u2192' + e.to]; });
+      var acyclic = links.filter(function (e) { return !isBack[e.from + '\u2192' + e.to]; });
 
-      var layer = {}, indeg = {};
-      nodes.forEach(function (n) { indeg[n.id] = 0; });
+      var level = {}, indeg = {};
+      keys.forEach(function (k) { indeg[k] = 0; });
       acyclic.forEach(function (e) { indeg[e.to]++; });
-      var queue = nodes.filter(function (n) { return !indeg[n.id]; }).map(function (n) { return n.id; });
-      if (!queue.length && nodes.length) queue = [nodes[0].id];
-      queue.forEach(function (id) { layer[id] = 0; });
+      var queue = keys.filter(function (k) { return !indeg[k]; });
+      if (!queue.length && keys.length) queue = [keys[0]];
+      queue.forEach(function (k) { level[k] = 0; });
       var guard = 0;
       while (queue.length && guard++ < 20000) {
         var c = queue.shift();
         acyclic.forEach(function (e) {
           if (e.from !== c) return;
-          var d = (layer[c] || 0) + 1;
-          if (d >= nodes.length) return;
-          if (layer[e.to] == null || layer[e.to] < d) { layer[e.to] = d; queue.push(e.to); }
+          var d = (level[c] || 0) + 1;
+          if (d >= keys.length) return;
+          if (level[e.to] == null || level[e.to] < d) { level[e.to] = d; queue.push(e.to); }
         });
       }
-      nodes.forEach(function (n) { if (layer[n.id] == null) layer[n.id] = 0; });
+      keys.forEach(function (k) { if (level[k] == null) level[k] = 0; });
+      return level;
+    }
+
+    // ---- layout (for nodes the overlay has no position for)
+    function layout(nodes, edges) {
+      var ids = {}; nodes.forEach(function (n) { ids[n.id] = n; });
+      var inner = edges.filter(function (e) { return ids[e.from] && ids[e.to]; });
+
+      // A subgraph is laid out as one thing. The levels are taken on the graph with each
+      // group folded into a single unit, so a group holds a run of columns instead of being
+      // torn apart wherever the flow leaves it and comes back. Inside the run the members are
+      // levelled again among themselves. A document with no subgraph folds nothing, and the
+      // fold of a plain graph is the graph, so it lands exactly where it did before.
+      function unit(id) { return (ids[id].group ? 'g ' + ids[id].group : 'n ' + id); }
+      var units = [], seenUnit = {};
+      nodes.forEach(function (n) {
+        var u = unit(n.id);
+        if (!seenUnit[u]) { seenUnit[u] = 1; units.push(u); }
+      });
+      var folded = [];
+      inner.forEach(function (e) {
+        var a = unit(e.from), b = unit(e.to);
+        if (a !== b) folded.push({ from: a, to: b });
+      });
+      var uLevel = levels(units, folded);
+
+      // Depth inside a group, from the edges the group holds on its own.
+      var members = {}, depth = {}, span = {};
+      nodes.forEach(function (n) { if (n.group) (members[n.group] = members[n.group] || []).push(n.id); });
+      Object.keys(members).forEach(function (g) {
+        var mine = {};
+        members[g].forEach(function (id) { mine[id] = 1; });
+        var sub = levels(members[g], inner.filter(function (e) { return mine[e.from] && mine[e.to]; }));
+        var wide = 0;
+        members[g].forEach(function (id) { depth[id] = sub[id]; wide = Math.max(wide, sub[id] + 1); });
+        span[g] = wide;
+      });
+
+      // A level of the folded graph is as wide as the widest unit standing on it, and the
+      // next level starts past it.
+      var uMax = 0;
+      units.forEach(function (u) { uMax = Math.max(uMax, uLevel[u]); });
+      var width = [], start = [], at = 0;
+      for (var ui = 0; ui <= uMax; ui++) width.push(1);
+      units.forEach(function (u) {
+        var w = u.charAt(0) === 'g' ? span[u.slice(2)] : 1;
+        if (w > width[uLevel[u]]) width[uLevel[u]] = w;
+      });
+      for (var uj = 0; uj <= uMax; uj++) { start.push(at); at += width[uj]; }
+
+      var layer = {};
+      nodes.forEach(function (n) {
+        layer[n.id] = start[uLevel[unit(n.id)]] + (n.group ? depth[n.id] : 0);
+      });
 
       var maxL = 0;
       nodes.forEach(function (n) { maxL = Math.max(maxL, layer[n.id]); });
@@ -1513,13 +1564,56 @@
             }).map(function (e) { return pos[forward ? e.from : e.to]; });
             bary[id] = refs.length ? refs.reduce(function (a, b) { return a + b; }, 0) / refs.length : pos[id];
           });
-          L.sort(function (a, b) { return bary[a] - bary[b] || pos[a] - pos[b]; });
+          // Members of a group stay next to each other in the column. The group rides on the
+          // mean of its members and they keep their own order inside it. Without the name as
+          // a tiebreak, two groups landing on the same mean comb into each other.
+          var sum = {}, count = {};
+          L.forEach(function (id) {
+            var g = ids[id].group;
+            if (!g) return;
+            sum[g] = (sum[g] || 0) + bary[id];
+            count[g] = (count[g] || 0) + 1;
+          });
+          var rank = function (id) {
+            var g = ids[id].group;
+            return g ? sum[g] / count[g] : bary[id];
+          };
+          L.sort(function (a, b) {
+            var ga = ids[a].group || '', gb = ids[b].group || '';
+            return rank(a) - rank(b) || (ga < gb ? -1 : ga > gb ? 1 : 0) ||
+              bary[a] - bary[b] || pos[a] - pos[b];
+          });
           L.forEach(function (id, i) { pos[id] = i; });
         });
       }
 
       var rows = 0;
       layers.forEach(function (L) { rows = Math.max(rows, L.length); });
+
+      // Which row each node takes. A group runs across several columns, so it only reads as
+      // one block if it holds the same rows in all of them. A group takes the rows it first
+      // lands on and keeps them; a column that has to push it down carries it down from there.
+      var grouped = nodes.some(function (n) { return !!n.group; });
+      var row = {}, lane = {};
+      layers.forEach(function (L) {
+        var r = 0, i = 0;
+        while (i < L.length) {
+          var g = ids[L[i]].group;
+          if (!g) { row[L[i]] = r++; i++; continue; }
+          var run = 1;
+          while (i + run < L.length && ids[L[i + run]].group === g) run++;
+          var top = lane[g] == null ? r : Math.max(r, lane[g]);
+          lane[g] = top;
+          for (var k = 0; k < run; k++) row[L[i + k]] = top + k;
+          r = top + run;
+          i += run;
+        }
+      });
+      if (grouped) {
+        var deepest = 0;
+        layers.forEach(function (L) { L.forEach(function (id) { deepest = Math.max(deepest, row[id]); }); });
+        rows = deepest + 1;
+      }
 
       // A long thin stack of levels is folded like a snake. A 45 step pipeline laid out in one
       // row is an 8000px band with nothing readable in it. The band width is picked to land closest to the screen ratio (about 1.6).
@@ -1537,10 +1631,12 @@
         var band = Math.floor(li / bandCols);
         // Odd bands run in reverse so the flow carries straight down where one band meets the next.
         var col = band % 2 ? bandCols - 1 - (li % bandCols) : li % bandCols;
-        var off = (rows - L.length) / 2;
+        // A plain flow centres each column on the tallest one. Centring shifts a column by its
+        // own length, which is the one thing a reserved row cannot survive.
+        var off = grouped ? 0 : (rows - L.length) / 2;
         L.forEach(function (id, i) {
           ids[id].ax = 60 + col * COL_W;
-          ids[id].ay = 60 + band * bandH + (off + i) * ROW_H;
+          ids[id].ay = 60 + band * bandH + (off + (grouped ? row[id] : i)) * ROW_H;
         });
       });
     }
