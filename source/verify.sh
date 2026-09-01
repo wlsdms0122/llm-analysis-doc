@@ -72,6 +72,14 @@ if [ "$future_bytes" -gt 4000000 ]; then
   exit 1
 fi
 
+# 7) The document is text. One control byte in the shell makes the file binary to every tool
+#    that reads it, grep included, and the shell is copied into every document baked after it.
+clean=$(LC_ALL=C tr -d '\000-\010\013\014\016-\037\177' <"$out" | wc -c | tr -d ' ')
+if [ "$clean" != "$bytes" ]; then
+  echo "failed: the output carries $((bytes - clean)) control bytes. the shell is not plain text." >&2
+  exit 1
+fi
+
 mb=$(echo "$bytes" | awk '{printf "%.1f", $1/1048576}')
 plain_kb=$((plain_bytes / 1024))
 echo "ok  EXAMPLE.md -> ${mb}MB, no diagram -> ${plain_kb}KB, no external requests, no placeholders"
