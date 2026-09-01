@@ -182,7 +182,7 @@ So the figure in the body (rendered by mermaid) and the one on the canvas are **
 
 A subgraph is laid out as one thing. The levels are taken on the graph with each group folded into a single unit, so a group holds a run of columns rather than being torn apart wherever the flow leaves it and comes back. Inside the run the members are levelled again among themselves, and the members hold the same rows across every column the group spans. What this costs is that a column is no longer the distance from the entry: a node the flow reaches late can stand early, in its group's run, with the edge running back to it. A document with no subgraph folds nothing, and the fold of a plain graph is the graph, so it lays out as it always did.
 
-A group draws a frame behind its members with its name on it. The frame is a reading of where the members are and holds nothing of its own, so it cannot fall out of step with the document: drag a member away and the frame follows it. It takes no pointer either, so dragging across it pans the canvas the way any empty place does.
+A group draws a frame behind its members with its name on it. The frame is a reading of where the members are and holds nothing of its own, so it cannot fall out of step with the document: drag a member away and the frame follows it. It takes no pointer either, so dragging across it pans the canvas the way any empty place does. The **name** does take the pointer: it is the group's handle, and pressing it picks every member so the whole group drags together.
 
 Nesting is read but not drawn as containment. An inner subgraph is a group of its own next to the outer one rather than inside it.
 
@@ -212,7 +212,7 @@ The **minimap** at the bottom right holds the whole graph shrunk down, with what
 Past 10 levels the layout is **folded like a snake** to fit the screen ratio, with odd bands reversed so the flow carries through. A cycle in the document, a failure looping back into the entry for instance, leaves the back edge out of the level calculation only. It is still drawn.
 
 - Drag the background to pan, wheel to zoom. The toolbar carries **fit, zoom in, zoom out** and the current scale
-- Drag a node to move it. Edges attached to the selected node are always highlighted in **one accent colour**, because mixing that with each edge's own colour makes "selected" look different per edge. Dragging the background does not clear the selection. Only a click in place does
+- Drag a node to move it. **Shift and a click** picks one more or drops one already picked, and **shift and a drag over the background** picks everything the box touches. Dragging any picked node moves all of them by the same step, so what was picked keeps its shape. Pressing a picked node and letting go without moving falls back to that one alone. Edges attached to a selected node are always highlighted in **one accent colour**, because mixing that with each edge's own colour makes "selected" look different per edge. Dragging the background does not clear the selection. Only a click in place does
 - Colour is one row of presets plus the system colour picker plus direct hex entry. A value not in the presets marks the custom slot as selected
 - **The inspector** is a popup on the right of the canvas, since the left is taken by the diagram list
 - **Node properties**: shape, background, text, border colour, border style (solid, dashed, dotted, none), border width. The label is read only and owned by the document
@@ -223,7 +223,8 @@ Past 10 levels the layout is **folded like a snake** to fit the screen ratio, wi
 - **Save** (JSON) and **Load** hand the whole overlay around
 - **Reset** drops the current diagram's overlay alone and goes back to the document
 - **Show in doc** moves to the section this diagram sits in and highlights it
-- **Focus** keeps the selected node's one hop neighbours and dims the rest
+- **Focus** keeps the selected nodes' one hop neighbours and dims the rest
+- The inspector edits one node's properties, so it opens for **one** selection. With several picked it stays closed
 - The inspector collapses from the caret in its header. The x clears the selection
 
 ### Node shapes

@@ -597,10 +597,20 @@ body.cv-dragging { cursor: grabbing; }
   border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--fg) 3%, transparent);
 }
+/* The name is the group's handle: it takes the pointer where the frame does not. */
 .cv-frame-name {
   position: absolute; left: 13px; top: 4px;
   font-family: var(--mono); font-size: 10.5px; font-weight: 500;
   letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute);
+  pointer-events: auto; cursor: move;
+}
+.cv-frame-name:hover { color: var(--accent); }
+body.cv-readonly .cv-frame-name { cursor: pointer; }
+
+/* The box drawn while shift and a drag pick several nodes at once. */
+.cv-band {
+  position: absolute; z-index: 5; pointer-events: none;
+  border: 1px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm);
 }
 
 /* Left panel: the diagram list, in canvas mode. */

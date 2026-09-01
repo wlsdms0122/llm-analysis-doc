@@ -1698,7 +1698,11 @@
     function nodeById(id) { for (var i = 0; i < g.nodes.length; i++) if (g.nodes[i].id === id) return g.nodes[i]; return null; }
     function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
     function nodeEl(id) { return $('.cv-node[data-id="' + cssEsc(id) + '"]', world); }
-    function selNode() { return sel && sel.t === 'node' ? nodeById(sel.id) : null; }
+    // A node selection carries every picked node. The inspector still wants one, because
+    // what it edits is one node's properties, so it answers only when one is picked.
+    function selIds() { return sel && sel.t === 'node' ? sel.ids : []; }
+    function isSel(id) { return selIds().indexOf(id) >= 0; }
+    function selNode() { return selIds().length === 1 ? nodeById(sel.ids[0]) : null; }
     function selEdge() { return sel && sel.t === 'edge' ? g.edges[sel.i] : null; }
 
     function applyNodeStyle(el, n) {
@@ -1727,10 +1731,12 @@
       if (!focusOn || !sel) return null;
       var keep = {};
       if (sel.t === 'node') {
-        keep[sel.id] = 1;
-        g.edges.forEach(function (e) {
-          if (e.from === sel.id) keep[e.to] = 1;
-          if (e.to === sel.id) keep[e.from] = 1;
+        sel.ids.forEach(function (id) {
+          keep[id] = 1;
+          g.edges.forEach(function (e) {
+            if (e.from === id) keep[e.to] = 1;
+            if (e.to === id) keep[e.from] = 1;
+          });
         });
       } else {
         var e = g.edges[sel.i];
@@ -1760,6 +1766,7 @@
         var b = bounds[name];
         var el = document.createElement('div');
         el.className = 'cv-frame';
+        el.dataset.group = name;
         el.style.left = (b.x1 - FRAME_PAD) + 'px';
         el.style.top = (b.y1 - FRAME_PAD - FRAME_HEAD) + 'px';
         el.style.width = (b.x2 - b.x1 + FRAME_PAD * 2) + 'px';
@@ -1774,13 +1781,12 @@
       world.style.transform = 'translate(' + view.tx + 'px,' + view.ty + 'px) scale(' + view.scale + ')';
       $('#cvZoomLabel').textContent = Math.round(view.scale * 100) + '%';
       $$('.cv-node', world).forEach(function (el) { el.remove(); });
-      var selId = sel && sel.t === 'node' ? sel.id : null;
       var keep = focusSet();
       g.nodes.forEach(function (n) {
         var el = document.createElement('div');
         var shaped = !!SHAPE_SVG[n.shape];
         el.className = 'cv-node ' + (n.shape || 'rect') + (shaped ? ' shaped' : '') +
-          (selId === n.id ? ' sel' : '') + (keep && !keep[n.id] ? ' dim' : '');
+          (isSel(n.id) ? ' sel' : '') + (keep && !keep[n.id] ? ' dim' : '');
         el.dataset.id = n.id;
         el.style.left = n.x + 'px';
         el.style.top = n.y + 'px';
@@ -2069,13 +2075,13 @@
       });
       var defs = '', parts = '', hits = '';
       var selI = sel && sel.t === 'edge' ? sel.i : -1;
-      var selNodeId = sel && sel.t === 'node' ? sel.id : null;
+
       var keep = focusSet();
 
       g.edges.forEach(function (e, i) {
         var a = nodeById(e.from), b = nodeById(e.to);
         if (!a || !b) return;
-        var hl = i === selI || (selNodeId && (e.from === selNodeId || e.to === selNodeId));
+        var hl = i === selI || isSel(e.from) || isSel(e.to);
         var dim = keep && !(keep[e.from] && keep[e.to]);
         var color = hl ? 'var(--accent)' : (e.color || 'var(--line-strong)');
         var p = edgePath(a, b, box[e.from], box[e.to], i, e.route || 'auto');
@@ -2307,8 +2313,6 @@
       var lineC = css.getPropertyValue('--fg-faint').trim() || '#888';
       var nodeC = css.getPropertyValue('--fg-mute').trim() || '#666';
       var accent = css.getPropertyValue('--accent').trim() || '#4a9eff';
-      var selId = sel && sel.t === 'node' ? sel.id : null;
-
       var at = {};
       g.nodes.forEach(function (n) {
         var el = nodeEl(n.id);
@@ -2332,7 +2336,7 @@
 
       ctx.globalAlpha = 1;
       g.nodes.forEach(function (n) {
-        var p = at[n.id], on = selId === n.id;
+        var p = at[n.id], on = isSel(n.id);
         ctx.fillStyle = on ? accent : (p.bg || nodeC);
         ctx.globalAlpha = on ? 1 : (p.bg ? .9 : .55);
         ctx.fillRect(p.x, p.y, p.w, p.h);
@@ -2451,8 +2455,27 @@
       var panning = false, sx = 0, sy = 0, otx = 0, oty = 0, moved = false;
       var drag = { on: false };
 
+      // Shift and a drag over empty canvas picks everything the box touches. Without the
+      // shift the same drag pans, which is the older and more common of the two.
+      var band = null;
+      function bandRect(e) {
+        var r = stage.getBoundingClientRect();
+        return {
+          left: Math.min(band.x, e.clientX), top: Math.min(band.y, e.clientY),
+          right: Math.max(band.x, e.clientX), bottom: Math.max(band.y, e.clientY), host: r
+        };
+      }
       stage.addEventListener('mousedown', function (e) {
         if (e.target.closest('.cv-node') || e.target.closest('.hit') || e.target.closest('.cv-inspect')) return;
+        if (e.target.closest('.cv-frame-name')) return;
+        if (e.shiftKey) {
+          band = { x: e.clientX, y: e.clientY, el: document.createElement('div') };
+          band.el.className = 'cv-band';
+          stage.appendChild(band.el);
+          document.body.classList.add('cv-dragging');
+          e.preventDefault();
+          return;
+        }
         panning = true; moved = false; stage.classList.add('panning');
         document.body.classList.add('cv-dragging');
         sx = e.clientX; sy = e.clientY; otx = view.tx; oty = view.ty;
@@ -2466,21 +2489,58 @@
           draw(); buildInspect();
           return;
         }
+        // The name on a subgraph frame is the handle for the whole group. The frame itself
+        // takes no pointer, so dragging across it still pans.
+        var tag = e.target.closest('.cv-frame-name');
+        if (tag) {
+          e.stopPropagation(); e.preventDefault();
+          var group = tag.parentElement.dataset.group;
+          var mine = g.nodes.filter(function (n) { return n.group === group; }).map(function (n) { return n.id; });
+          if (!mine.length) return;
+          sel = { t: 'node', ids: mine };
+          startDrag(mine[0], e);
+          draw(); buildInspect();
+          return;
+        }
         var el = e.target.closest('.cv-node');
         if (!el) return;
         e.stopPropagation(); e.preventDefault();
-        sel = { t: 'node', id: el.dataset.id };
-        // Selection lives even when read only. *Looking* at properties is not editing. Only moving is blocked.
-        if (editable()) {
-          document.body.classList.add('cv-dragging');
-          var n = nodeById(sel.id);
-          drag = { on: true, id: sel.id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y };
+        var id = el.dataset.id;
+        // Shift picks one more, or drops one already picked. It never starts a drag, so a
+        // selection can be built up without the nodes moving under the pointer.
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          var ids = selIds().slice(), was = ids.indexOf(id);
+          if (was >= 0) ids.splice(was, 1); else ids.push(id);
+          sel = ids.length ? { t: 'node', ids: ids } : null;
+          draw(); buildInspect();
+          return;
         }
+        // Pressing one that is already picked keeps the rest, which is what makes a group of
+        // them draggable. Released without moving, it falls back to that one alone.
+        if (!isSel(id)) sel = { t: 'node', ids: [id] };
+        startDrag(id, e);
         // Redrawn through draw(). Swapping the sel class alone leaves focus dimming on the old selection
         draw();
         buildInspect();
       });
+
+      // Selection lives even when read only. *Looking* at properties is not editing. Only moving is blocked.
+      function startDrag(id, e) {
+        if (!editable()) return;
+        document.body.classList.add('cv-dragging');
+        drag = {
+          on: true, id: id, sx: e.clientX, sy: e.clientY, moved: false,
+          from: selIds().map(function (k) { var n = nodeById(k); return { id: k, x: n.x, y: n.y }; })
+        };
+      }
       window.addEventListener('mousemove', function (e) {
+        if (band) {
+          var r = bandRect(e);
+          band.el.style.left = (r.left - r.host.left) + 'px';
+          band.el.style.top = (r.top - r.host.top) + 'px';
+          band.el.style.width = (r.right - r.left) + 'px';
+          band.el.style.height = (r.bottom - r.top) + 'px';
+        }
         if (panning) {
           if (Math.abs(e.clientX - sx) > 3 || Math.abs(e.clientY - sy) > 3) moved = true;
           view.tx = otx + (e.clientX - sx); view.ty = oty + (e.clientY - sy);
@@ -2488,33 +2548,59 @@
           syncMapVp();
         }
         if (drag.on) {
-          var n = nodeById(drag.id);
-          var rx = drag.ox + (e.clientX - drag.sx) / view.scale;
-          var ry = drag.oy + (e.clientY - drag.sy) / view.scale;
+          var lead = null;
+          drag.from.forEach(function (f) { if (f.id === drag.id) lead = f; });
+          var rx = lead.x + (e.clientX - drag.sx) / view.scale;
+          var ry = lead.y + (e.clientY - drag.sy) / view.scale;
+          if (Math.abs(e.clientX - drag.sx) > 2 || Math.abs(e.clientY - drag.sy) > 2) drag.moved = true;
           if (snapOn) {
             var sp = snapPos(drag.id, rx, ry);
-            n.x = sp.x; n.y = sp.y; guides = { v: sp.v, h: sp.h };
+            rx = sp.x; ry = sp.y; guides = { v: sp.v, h: sp.h };
           } else {
-            n.x = rx; n.y = ry; guides = { v: null, h: null };
+            guides = { v: null, h: null };
           }
-          var el = nodeEl(drag.id);
-          if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+          // The one under the pointer decides the step and the rest of the picked nodes take
+          // the same one, so what was picked keeps its shape.
+          var dx = rx - lead.x, dy = ry - lead.y;
+          drag.from.forEach(function (f) {
+            var n = nodeById(f.id);
+            n.x = f.x + dx; n.y = f.y + dy;
+            var el = nodeEl(f.id);
+            if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+          });
           drawFrames(); drawEdges(); drawMap();
         }
       });
-      window.addEventListener('mouseup', function () {
+      window.addEventListener('mouseup', function (e) {
         document.body.classList.remove('cv-dragging');
+        if (band) {
+          var r = bandRect(e);
+          var hits = [];
+          g.nodes.forEach(function (n) {
+            var el = nodeEl(n.id);
+            if (!el) return;
+            var b = el.getBoundingClientRect();
+            if (b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom) hits.push(n.id);
+          });
+          band.el.remove();
+          band = null;
+          sel = hits.length ? { t: 'node', ids: hits } : null;
+          draw(); buildInspect();
+        }
         if (panning) {
           panning = false; stage.classList.remove('panning');
           if (!moved && sel) { sel = null; draw(); buildInspect(); }
           persistView();
         }
         if (drag.on) {
-          var n = nodeById(drag.id);
-          var o = nodeOv(drag.id);
-          o.x = n.x; o.y = n.y;
+          drag.from.forEach(function (f) {
+            var n = nodeById(f.id), o = nodeOv(f.id);
+            o.x = n.x; o.y = n.y;
+          });
+          var picked = drag.id, still = drag.moved;
           drag.on = false; saveOverlay();
           guides = { v: null, h: null };
+          if (!still && selIds().length > 1) { sel = { t: 'node', ids: [picked] }; draw(); buildInspect(); }
           drawEdges();
         }
       });
