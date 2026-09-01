@@ -663,7 +663,11 @@
     // The wrapper is a border box, so what the table gets is the width minus the wrapper's
     // own border. Leave it out and the table is two pixels short and wraps at every measure.
     var edge = box.offsetWidth - box.clientWidth;
-    box.style.setProperty('--table-w', Math.round(Math.max(column, Math.min(wantedWidth(t) + edge, room))) + 'px');
+    var want = Math.min(wantedWidth(t) + edge, room);
+    // A table the reader has sized states its own width, so the frame follows it down as well
+    // as up. One left to itself fills the column, and the frame stays out at the column with it.
+    if (!t.classList.contains('sized')) want = Math.max(column, want);
+    box.style.setProperty('--table-w', Math.round(want) + 'px');
   }
 
   function fitTables() { $$('#doc .table-scroll').forEach(fitTable); }
