@@ -551,7 +551,15 @@ body.cv-dragging { cursor: grabbing; }
 }
 .cv-node.sel:not(.shaped) { border-color: var(--accent) !important; }
 .cv-node.sel.shaped .cv-shape > * { stroke: var(--accent) !important; stroke-opacity: 1 !important; }
-.cv-node .cv-label, .cv-node .cv-sub { position: relative; z-index: 1; }
+/* A label with no space in it, an identifier or a URL, has nowhere to wrap and runs out of
+   the box the node draws. It is the document's text, so it breaks rather than being cut.
+   A shaped node lays its label out with flex, where the automatic minimum of an item is its
+   longest word. Left at that, the label keeps the width of the word and the break never
+   happens. */
+.cv-node .cv-label, .cv-node .cv-sub {
+  position: relative; z-index: 1;
+  overflow-wrap: break-word; min-width: 0; max-width: 100%;
+}
 .cv-node .cv-sub { font-size: 9.5px; color: var(--fg-faint); margin-top: 4px; letter-spacing: .06em; text-transform: uppercase; }
 
 /* Shapes drawn with a div. */
