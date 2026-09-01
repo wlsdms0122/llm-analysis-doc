@@ -25,6 +25,7 @@
     moon: '<svg viewBox="0 0 16 16"><path d="M13.5 9.6A5.8 5.8 0 016.4 2.5a5.8 5.8 0 107.1 7.1z"/></svg>',
     auto: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 010 11z" fill="currentColor" stroke="none"/></svg>',
     code: '<svg viewBox="0 0 16 16"><path d="M6 3L2 8l4 5"/><path d="M10 3l4 5-4 5"/></svg>',
+    copy: '<svg viewBox="0 0 16 16"><rect x="5.5" y="1.5" width="9" height="9" rx="1.5"/><path d="M10.5 13.5h-8a1 1 0 01-1-1v-8"/></svg>',
     caret: '<svg viewBox="0 0 16 16" class="dd-caret"><path d="M4 6.5L8 10.5 12 6.5"/></svg>',
     canvas: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="9.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="5.5" y="10" width="5" height="3.5" rx="1"/><path d="M4 6v2h8V6M8 8v2"/></svg>',
     chevronUp: '<svg viewBox="0 0 16 16"><path d="M4 10L8 6l4 4"/></svg>',
@@ -456,6 +457,7 @@
         '<button class="zoom-only" data-act="zin" title="Zoom in">' + ICON.zoomIn + '</button>' +
         '<button class="zoom-only" data-act="zfit" title="Fit">' + ICON.fit + '</button>' +
         '<button data-act="src" title="Show the mermaid source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the mermaid source">' + ICON.copy + '</button>' +
         '<button data-act="svg" title="Download the SVG">' + ICON.download + '</button>' +
         '<button data-act="zoom" title="Enlarge">' + ICON.expand + '</button>' +
       '</div>' +
@@ -472,6 +474,7 @@
         '<span class="sp"></span>' +
         '<button data-act="canvas" data-gi="' + gi + '" title="Show on the flow canvas">' + ICON.canvas + '</button>' +
         '<button data-act="src" title="Show the mermaid source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the mermaid source">' + ICON.copy + '</button>' +
       '</div>' +
       '<div class="figure-body"><pre class="mermaid-src"><code>' + esc(src) + '</code></pre></div></div>';
   }
@@ -990,6 +993,11 @@
         var showing = fig.classList.toggle('showsrc');
         btn.classList.toggle('on', showing);
         btn.title = showing ? 'Show the diagram' : 'Show the mermaid source';
+      }
+      else if (act === 'copysrc') {
+        copyText($('.mermaid-src', fig).textContent).then(
+          function () { toast('mermaid source copied'); },
+          function () { toast('copy failed'); });
       }
       else if (act === 'svg') exportFigureSVG(fig);
       else if (act === 'canvas') { setView('canvas'); canvas.open(Number(btn.dataset.gi)); }

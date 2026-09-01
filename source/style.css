@@ -375,6 +375,9 @@ body.nav-resizing .nav-handle-bar { background: var(--accent); height: 56px; }
 .figure-bar .sp { flex: 1; }
 .figure-bar .zoom-only { display: none; }
 .figure.zoom .figure-bar .zoom-only { display: inline-flex; }
+/* Copying is offered where the text is on screen, which is where a reader reaches for it. */
+.figure-bar .src-only { display: none; }
+.figure.showsrc .figure-bar .src-only { display: inline-flex; }
 .figure-bar button {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 24px; height: 22px; padding: 0 5px;

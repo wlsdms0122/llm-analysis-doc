@@ -76,7 +76,7 @@ graph TD
 ```
 ````
 
-A rendered diagram gets **show source** (`<>`), download SVG, and **enlarge**. Show source unfolds that block's mermaid text in place of the diagram, and pressing it again goes back. In the enlarged view, wheel zoom, drag pan, and the zoom in, zoom out and fit buttons come alive, and `Esc` closes it. A `graph` or `flowchart` block **also goes on the flow canvas automatically.**
+A rendered diagram gets **show source** (`<>`), download SVG, and **enlarge**. Show source unfolds that block's mermaid text in place of the diagram, and pressing it again goes back. While the source is on screen a **copy** button stands next to it and puts that block's mermaid text on the clipboard. In the enlarged view, wheel zoom, drag pan, and the zoom in, zoom out and fit buttons come alive, and `Esc` closes it. A `graph` or `flowchart` block **also goes on the flow canvas automatically.**
 
 What a block declares is decided by its **first effective line**. A mermaid frontmatter block (`---`), a `%%{init:...}%%` directive, a `%%` comment and blank lines before it are skipped. That is why a flowchart carrying a theme directive still lands on the canvas.
 
