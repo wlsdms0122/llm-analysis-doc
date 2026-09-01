@@ -53,6 +53,8 @@ All optional. Without `title`, the first `#` heading is used.
 
 Ordinary markdown (tables, code, quotes, lists) works as it is, and the following is added.
 
+A table is measured at the width where none of its text wraps. If that is more than the text column it reaches past the column, up to what the window holds, and stays centred on it. Beyond that the reader drags a boundary in the header row: the column left of it takes the new width, the other columns keep theirs, and the table takes the difference. Double click a boundary and the table goes back to the measured widths. A table inside a callout or a comparison stays in that block and scrolls sideways instead. Nothing here is stored, and reopening the document measures again.
+
 One markdown rule bites Korean harder than English. A closing `**` that sits straight after punctuation, with a letter and no space after it, does not close the emphasis:
 
 ```

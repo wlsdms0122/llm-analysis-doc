@@ -261,15 +261,37 @@ body.nav-resizing .nav-handle-bar { background: var(--accent); height: 56px; }
   color: var(--fg-mute);
 }
 
-.table-scroll { overflow-x: auto; margin: 20px 0; border: 1px solid var(--line); border-radius: var(--radius-md); }
+/* A table is the one block that is allowed out of the text column. --table-w is what app.js
+   measured the table wanting, and the negative left margin keeps it centred on the column.
+   Without the variable it behaves as any other block and fills the column. */
+.table-scroll {
+  overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-md);
+  width: var(--table-w, 100%);
+  margin: 20px 0;
+  margin-left: calc((100% - var(--table-w, 100%)) / 2);
+}
 .doc table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .doc th, .doc td { padding: 9px 13px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .doc th {
   background: var(--bg-soft); font-family: var(--mono); font-weight: 500;
   font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
   color: var(--fg-mute); white-space: nowrap;
+  position: relative;   /* holds the grip */
 }
 .doc tr:last-child td { border-bottom: 0; }
+
+/* Once a column has been dragged the widths are the reader's, so the header wraps rather
+   than pushing out of a column narrower than its own text. */
+.doc table.sized { table-layout: fixed; }
+.doc table.sized th { white-space: normal; }
+
+.col-grip { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; }
+.col-grip::after {
+  content: ''; position: absolute; left: 3px; top: 0; width: 1px; height: 100%;
+  background: transparent; transition: background .12s;
+}
+.table-scroll:hover .col-grip::after { background: var(--line-strong); }
+.table-scroll .col-grip:hover::after, .table-scroll .col-grip.on::after { background: var(--accent); }
 
 /* ---------- component: callout ---------- */
 
@@ -803,7 +825,11 @@ body.cvm-dragging .cvm-body { cursor: grabbing; }
 /* ---------- print ---------- */
 
 @media print {
-  .nav, .figure-bar, .seq-head { display: none; }
+  .nav, .figure-bar, .seq-head, .col-grip { display: none; }
   .main { overflow: visible; }
   .doc { max-width: none; padding: 0; }
+  /* The page has its own width, so screen widths are dropped and the table fills the page. */
+  .table-scroll { width: auto; margin-left: 0; }
+  .doc table.sized { width: 100%; table-layout: auto; }
+  .doc table.sized col { width: auto; }
 }
