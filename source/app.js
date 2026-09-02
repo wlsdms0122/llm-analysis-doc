@@ -523,15 +523,64 @@
     [/^>(.*)\]$/, 'round']
   ];
 
+  // mermaid's `@{ shape: ... }` names, against the shapes the canvas draws. A name outside
+  // this table becomes a rectangle, which is what a shape carrying no meaning here should
+  // look like.
+  var SHAPE_ALIASES = {
+    rounded: 'round', event: 'round',
+    stadium: 'stadium', terminal: 'stadium', pill: 'stadium',
+    'fr-rect': 'subroutine', subprocess: 'subroutine', subproc: 'subroutine',
+    'framed-rectangle': 'subroutine', subroutine: 'subroutine',
+    cyl: 'cylinder', db: 'cylinder', database: 'cylinder', cylinder: 'cylinder',
+    'h-cyl': 'cylinder', das: 'cylinder', 'horizontal-cylinder': 'cylinder',
+    'lin-cyl': 'cylinder', disk: 'cylinder', 'lined-cylinder': 'cylinder',
+    circle: 'circle', circ: 'circle',
+    'sm-circ': 'circle', start: 'circle', 'small-circle': 'circle',
+    'f-circ': 'circle', junction: 'circle', 'filled-circle': 'circle',
+    'dbl-circ': 'doublecircle', 'double-circle': 'doublecircle',
+    'fr-circ': 'doublecircle', stop: 'doublecircle', 'framed-circle': 'doublecircle',
+    diam: 'diamond', decision: 'diamond', diamond: 'diamond', question: 'diamond',
+    hex: 'hexagon', hexagon: 'hexagon', prepare: 'hexagon',
+    'lean-r': 'parallelogram', 'lean-right': 'parallelogram', 'in-out': 'parallelogram',
+    'lean-l': 'parallelogram', 'lean-left': 'parallelogram', 'out-in': 'parallelogram',
+    'trap-b': 'trapezoid', priority: 'trapezoid', 'trapezoid-bottom': 'trapezoid',
+    trapezoid: 'trapezoid', 'trap-t': 'trapezoid', manual: 'trapezoid',
+    'trapezoid-top': 'trapezoid', 'inv-trapezoid': 'trapezoid'
+  };
+
+  var META = /^@\{(.*)\}$/;
+  var META_ENTRY = /([\w-]+)\s*:\s*(?:"([^"]*)"|'([^']*)'|([^,}]*))/g;
+
+  // The keys mermaid takes in `@{ ... }` beyond these two name things the canvas has no way
+  // to draw, such as an icon or an image.
+  function parseMeta(body) {
+    var read = { shape: null, label: null }, m;
+    META_ENTRY.lastIndex = 0;
+    while ((m = META_ENTRY.exec(body))) {
+      var key = m[1].toLowerCase();
+      var value = (m[2] != null ? m[2] : m[3] != null ? m[3] : m[4] || '').trim();
+      if (key === 'shape') read.shape = SHAPE_ALIASES[value.toLowerCase()] || 'rect';
+      else if (key === 'label') read.label = value;
+    }
+    return read;
+  }
+
   function parseToken(tok, g, group) {
     tok = tok.trim();
     if (!tok) return null;
     var m = tok.match(/^([\w.$-]+)\s*(.*)$/);
     if (!m) return null;
     var id = m[1], rest = m[2].trim(), shape = null, label = null;
-    for (var i = 0; i < SHAPE_PATTERNS.length; i++) {
-      var r = rest.match(SHAPE_PATTERNS[i][0]);
-      if (r) { shape = SHAPE_PATTERNS[i][1]; label = r[1]; break; }
+    var meta = rest.match(META);
+    if (meta) {
+      var read = parseMeta(meta[1]);
+      shape = read.shape;
+      label = read.label;
+    } else {
+      for (var i = 0; i < SHAPE_PATTERNS.length; i++) {
+        var r = rest.match(SHAPE_PATTERNS[i][0]);
+        if (r) { shape = SHAPE_PATTERNS[i][1]; label = r[1]; break; }
+      }
     }
     if (label != null) label = stripQuotes(label);
     if (!g.map[id]) {
@@ -555,7 +604,16 @@
     // Emptying the name at `end` takes the outer group off every member that follows it.
     var open = [];
     function group() { return open[open.length - 1] || ''; }
-    src.split('\n').forEach(function (rawLine) {
+    // `id@{ ... }` may be written over several lines, one entry to a line. Folding it onto a
+    // single line keeps the rest of the parser reading a line at a time, and the line break
+    // becomes the comma that separates two entries written side by side.
+    var text = String(src).replace(/@\{[^}]*\}/g, function (block) {
+      return block.replace(/\s*\n\s*/g, ', ');
+    });
+    // `A e1@--> B` names the edge. The canvas has no edge ids, and holding the names keeps a
+    // later `e1@{ ... }` from being read as a node of its own.
+    var edgeIds = {};
+    text.split('\n').forEach(function (rawLine) {
       var line = rawLine.replace(/%%.*$/, '').trim();
       if (!line) return;
       if (/^(graph|flowchart)\b/i.test(line)) return;
@@ -569,13 +627,19 @@
       while ((m = re.exec(line))) { pieces.push(line.slice(last, m.index)); links.push(m[0].trim()); last = m.index + m[0].length; }
       pieces.push(line.slice(last));
 
-      if (pieces.length === 1) { parseToken(pieces[0], g, group()); return; }
+      if (pieces.length === 1) {
+        var solo = pieces[0].match(/^\s*([\w.$-]+)@\{/);
+        if (!(solo && edgeIds[solo[1]])) parseToken(pieces[0], g, group());
+        return;
+      }
 
       var prev = null;
       for (var i = 0; i < pieces.length; i++) {
         var piece = pieces[i], edgeLabel = '';
         var lm = piece.match(/^\s*\|([^|]*)\|\s*/);
         if (lm) { edgeLabel = stripQuotes(lm[1]); piece = piece.slice(lm[0].length); }
+        var named = piece.match(/\s([\w.-]+)@\s*$/);
+        if (named) { edgeIds[named[1]] = true; piece = piece.slice(0, named.index); }
         var id = parseToken(piece, g, group());
         if (id == null) {
           if (piece.trim() && prev != null) links[i] = piece.trim();
