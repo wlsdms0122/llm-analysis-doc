@@ -19,8 +19,8 @@ mkdir -p vendor && cd vendor
 MARKED_VERSION=12.0.2
 MARKED_SHA=15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894
 
-MERMAID_VERSION=10.9.1
-MERMAID_SHA=370ad9d7815e5fb54a059efce9be436740b74849b6fcdff21d1565379c6cd073
+MERMAID_VERSION=11.17.2
+MERMAID_SHA=6ad2f42c3fc26bbf9e45cbb6d11898972573ea52b33a5f4ff51952899f950ffd
 
 # A corporate network may block the public registries outright. A mirror goes here.
 CDN_BASES=(
@@ -79,12 +79,17 @@ else
   trap 'rm -f "$tgz"' EXIT
   if got=$(fetch "$MERMAID_SHA" "$tgz" "$REGISTRY/mermaid/-/mermaid-$MERMAID_VERSION.tgz"); then
     rm -rf mermaid && mkdir mermaid
-    # The published tarball puts everything under `package/`. Only the modules are read, so
-    # the type declarations and the docs that come with them go straight back out.
-    tar xzf "$tgz" -C mermaid --strip-components=2 package/dist
-    find mermaid -mindepth 1 -maxdepth 1 ! -name '*.js' ! -name '*.mjs' -exec rm -rf {} +
+    # The published tarball puts everything under `package/`. Three of the builds in there
+    # draw the same diagrams, so only the minified ESM one and the UMD bundle are kept: the
+    # entry module, the chunks it imports, and `mermaid.min.js` for the fallback.
+    tar xzf "$tgz" -C mermaid --strip-components=2 \
+      package/dist/mermaid.esm.min.mjs \
+      package/dist/mermaid.min.js \
+      package/dist/chunks/mermaid.esm.min
+    # Source maps are half the weight of what was just extracted and nothing reads them.
+    find mermaid -name '*.map' -delete
     echo "$MERMAID_SHA" > mermaid/.tarball-sha256
-    echo "mermaid ($MERMAID_VERSION) <- $got  ($(ls mermaid/*.js | wc -l | tr -d ' ') modules)"
+    echo "mermaid ($MERMAID_VERSION) <- $got  ($(find mermaid -name '*.mjs' | wc -l | tr -d ' ') modules)"
   else
     echo "failed: mermaid $MERMAID_VERSION. the registry returned nothing matching the hash." >&2
     echo "  if the network blocks it, pass a mirror as ADOC_VENDOR_REGISTRY." >&2

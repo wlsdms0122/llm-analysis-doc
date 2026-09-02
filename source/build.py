@@ -151,7 +151,11 @@ def main() -> int:
         return 1
 
     out = args.out or args.markdown.with_suffix(".html")
-    built, note = build(args.markdown, out)
+    try:
+        built, note = build(args.markdown, out)
+    except mermaid_slice.VendorMissing as missing:
+        print(missing, file=sys.stderr)
+        return 1
     size = built.stat().st_size / 1024 / 1024
     print(f"{built}  ({size:.1f} MB, {note})")
     return 0

@@ -14,10 +14,9 @@ import json
 import pathlib
 import re
 
-# The entry of the minified ESM build. `dist/mermaid.esm.min.mjs` is a two line re-export
-# of this module, and `b9` is the mermaid object it exports as default.
+# The entry of the minified ESM build, and the name it exports the mermaid object under.
 ENTRY = "mermaid.esm.min.mjs"
-EXPORT = "b9"
+EXPORT = "default"
 
 # The UMD build of the same release: every diagram type, minified as one program, and it
 # puts mermaid on `window` from a classic script. It is smaller than the modules for every
@@ -25,20 +24,28 @@ EXPORT = "b9"
 # a set of published modules cannot.
 BUNDLE = "mermaid.min.js"
 
-STATIC_IMPORT = re.compile(r'((?:from|import)\s*)"\./([^"]+\.js)"')
-DYNAMIC_IMPORT = re.compile(r'import\("\./([^"]+\.js)"\)')
+# A specifier is relative to the module that writes it, and the modules sit two directories
+# below the entry, so a name only means one module once it has been resolved against its
+# importer. `_resolve` does that, and every name outside these patterns is the resolved one.
+STATIC_IMPORT = re.compile(r'((?:from|import)\s*)"(\.[^"]*\.m?js)"')
+DYNAMIC_IMPORT = re.compile(r'import\("(\.[^"]*\.m?js)"\)')
 
-# The first word of a mermaid block against the module that draws it. A module is named
+# The first word of a mermaid block against the modules that draw it. A module is named
 # after the diagram, and the hash in the filename changes between mermaid releases, so the
-# value here is a filename prefix rather than a filename.
+# values here are filename prefixes rather than filenames.
 #
-# `graph` and `flowchart` are given both flowchart modules because which one runs depends
-# on the `flowchart.defaultRenderer` setting rather than on the source.
+# A type takes more than one module where mermaid splits it. The renderer is one, the parser
+# another, and a diagram laid out by something other than dagre brings its own algorithm, so
+# an entry names every piece its type reaches for.
+#
+# Five of the newer types are published under a name that is a hash and nothing else, so
+# `diagram-` names all five renderers at once. They come to 43 KB together, which is less
+# than the fallback costs a document that draws one of them.
 DIAGRAM_MODULES = {
-    "graph": ["flowDiagram-v2-", "flowDiagram-"],
-    "flowchart": ["flowDiagram-v2-", "flowDiagram-"],
-    "flowchart-v2": ["flowDiagram-v2-", "flowDiagram-"],
-    "flowchart-elk": ["flowchart-elk-definition-"],
+    "graph": ["flowDiagram-"],
+    "flowchart": ["flowDiagram-"],
+    "flowchart-v2": ["flowDiagram-"],
+    "flowchart-elk": ["flowDiagram-"],
     "sequencediagram": ["sequenceDiagram-"],
     "classdiagram": ["classDiagram-v2-", "classDiagram-"],
     "classdiagram-v2": ["classDiagram-v2-"],
@@ -47,18 +54,46 @@ DIAGRAM_MODULES = {
     "erdiagram": ["erDiagram-"],
     "journey": ["journeyDiagram-"],
     "gantt": ["ganttDiagram-"],
-    "pie": ["pieDiagram-"],
+    "pie": ["pieDiagram-", "pie-"],
     "quadrantchart": ["quadrantDiagram-"],
+    "requirement": ["requirementDiagram-"],
     "requirementdiagram": ["requirementDiagram-"],
-    "gitgraph": ["gitGraphDiagram-"],
+    "gitgraph": ["gitGraphDiagram-", "gitGraph-"],
     "c4context": ["c4Diagram-"],
-    "mindmap": ["mindmap-definition-"],
+    "mindmap": ["mindmap-definition-", "cose-bilkent-"],
     "timeline": ["timeline-definition-"],
+    "kanban": ["kanban-definition-"],
+    "sankey": ["sankeyDiagram-"],
     "sankey-beta": ["sankeyDiagram-"],
+    "xychart": ["xychartDiagram-"],
     "xychart-beta": ["xychartDiagram-"],
+    "block": ["blockDiagram-"],
     "block-beta": ["blockDiagram-"],
-    "info": ["infoDiagram-"],
+    "info": ["infoDiagram-", "info-"],
+    "architecture": ["architectureDiagram-", "architecture-"],
+    "architecture-beta": ["architectureDiagram-", "architecture-"],
+    "swimlane-beta": ["swimlanesDiagram-", "swimlanes-"],
+    "ishikawa": ["ishikawaDiagram-"],
+    "ishikawa-beta": ["ishikawaDiagram-"],
+    "venn-beta": ["vennDiagram-"],
+    "wardley-beta": ["wardleyDiagram-", "wardley-"],
+    "cynefin-beta": ["cynefinDiagram-", "cynefin-"],
+    "railroad-beta": ["railroadDiagram-", "railroad-"],
+    "railroad-ebnf-beta": ["ebnfDiagram-", "railroad-ebnf-"],
+    "railroad-abnf-beta": ["abnfDiagram-", "railroad-abnf-"],
+    "railroad-peg-beta": ["pegDiagram-", "railroad-peg-"],
+    "packet": ["diagram-", "packet-"],
+    "packet-beta": ["diagram-", "packet-"],
+    "radar-beta": ["diagram-", "radar-"],
+    "treemap": ["diagram-", "treemap-"],
+    "treeview-beta": ["diagram-", "treeView-"],
+    "eventmodeling": ["diagram-", "eventmodeling-"],
 }
+
+# dagre lays out most of the types above and is lazy the same way they are. It comes to 11 KB
+# and which types reach for it is not something the vendor states, so every document that
+# draws anything gets it.
+LAYOUT_MODULES = ["dagre-"]
 
 # Math in a label is rendered by katex, which mermaid reaches for through the same dynamic
 # import as a diagram type.
@@ -111,7 +146,7 @@ def needed_prefixes(markdown: str) -> tuple[list[str], list[str]]:
         if not word:
             continue
         if word in DIAGRAM_MODULES:
-            prefixes += DIAGRAM_MODULES[word]
+            prefixes += DIAGRAM_MODULES[word] + LAYOUT_MODULES
         else:
             unknown.append(word)
         if "$$" in src:
@@ -128,19 +163,21 @@ def bundle(vendor: pathlib.Path) -> str:
 
 
 def _entry_module(vendor: pathlib.Path) -> str:
-    """The chunk `mermaid.esm.min.mjs` re-exports, resolved rather than pinned by hash."""
     entry = vendor / ENTRY
     if not entry.exists():
         raise VendorMissing(f"source/vendor/mermaid/{ENTRY} is missing.")
-    found = STATIC_IMPORT.search(entry.read_text(encoding="utf-8"))
-    if not found:
-        raise VendorMissing(f"source/vendor/mermaid/{ENTRY} imports nothing. the vendor is not mermaid's dist.")
-    return found.group(2)
+    return ENTRY
+
+
+def _resolve(importer: str, spec: str) -> str:
+    """A relative specifier as a name under `vendor/mermaid/`."""
+    return (pathlib.PurePosixPath(importer).parent / spec).as_posix()
 
 
 def _imports(vendor: pathlib.Path, name: str) -> tuple[set[str], set[str]]:
     text = (vendor / name).read_text(encoding="utf-8")
-    return {m[1] for m in STATIC_IMPORT.findall(text)}, set(DYNAMIC_IMPORT.findall(text))
+    return ({_resolve(name, m[1]) for m in STATIC_IMPORT.findall(text)},
+            {_resolve(name, m) for m in DYNAMIC_IMPORT.findall(text)})
 
 
 def select(vendor: pathlib.Path, prefixes: list[str]) -> list[str]:
@@ -150,18 +187,34 @@ def select(vendor: pathlib.Path, prefixes: list[str]) -> list[str]:
     static import needs that URL written into the text.
     """
     root = _entry_module(vendor)
-    _, dynamic = _imports(vendor, root)
-    seeds = sorted(d for d in dynamic if any(d.startswith(p) for p in prefixes))
 
+    def named(name: str, patterns: list[str]) -> bool:
+        base = pathlib.PurePosixPath(name).name
+        return any(base.startswith(p) for p in patterns)
+
+    # A wanted module is looked for in every module reached, not in the entry alone. mermaid
+    # keeps three registries of lazy loaders and only one of them sits in the entry: the
+    # diagram types are there, the parsers and the layout algorithms are each behind a chunk
+    # of their own.
     reachable: set[str] = set()
-    pending = [root, *seeds]
+    pending = [root]
     while pending:
         name = pending.pop()
         if name in reachable:
             continue
         reachable.add(name)
-        static, _ = _imports(vendor, name)
+        static, dynamic = _imports(vendor, name)
         pending += [n for n in static if n not in reachable]
+        pending += [n for n in dynamic if n not in reachable and named(n, prefixes)]
+
+    # A prefix that named nothing means the table and the vendor have drifted apart. The
+    # document would be baked without the module and the diagram it belongs to draws as
+    # mermaid's error picture, which the build cannot see.
+    missed = [p for p in dict.fromkeys(prefixes) if not any(named(n, [p]) for n in reachable)]
+    if missed:
+        raise VendorMissing(
+            "no module in source/vendor/mermaid/ is named " + ", ".join(missed)
+            + ". the table in mermaid_slice.py and this mermaid release disagree.")
 
     # mermaid's dist has no import cycle, so a plain post order is a valid load order.
     order: list[str] = []
@@ -193,8 +246,10 @@ def runtime(vendor: pathlib.Path, modules: list[str]) -> str:
     payload = []
     for name in modules:
         text = (vendor / name).read_text(encoding="utf-8")
-        text = STATIC_IMPORT.sub(lambda m: m.group(1) + json.dumps("mmd-blob:" + m.group(2)), text)
-        text = DYNAMIC_IMPORT.sub(lambda m: "import(__mmdUrl(" + json.dumps(m.group(1)) + "))", text)
+        text = STATIC_IMPORT.sub(
+            lambda m: m.group(1) + json.dumps("mmd-blob:" + _resolve(name, m.group(2))), text)
+        text = DYNAMIC_IMPORT.sub(
+            lambda m: "import(__mmdUrl(" + json.dumps(_resolve(name, m.group(1))) + "))", text)
         payload.append([name, text])
 
     return (

@@ -57,8 +57,9 @@ if [ "$plain_bytes" -gt 300000 ]; then
 fi
 
 # 6) A diagram type the build does not recognise falls back to the whole of mermaid rather
-#    than to a document that cannot draw it. The bundle is 3.4MB, and the modules for every
-#    type put together are 4.8MB, so the size says which of the two went in.
+#    than to a document that cannot draw it. The bundle and the modules for every type come
+#    to nearly the same size, so what says which of the two went in is the loader: only the
+#    sliced path emits one.
 future="$work/future.md"
 printf '# Future\n\n```mermaid\nfutureDiagram\n  a --> b\n```\n' >"$future"
 python3 source/build.py "$future" -o "$work/future.html" >/dev/null
@@ -67,8 +68,8 @@ if [ "$future_bytes" -lt 3000000 ]; then
   echo "failed: an unrecognised diagram type came to ${future_bytes} B. it was left out instead of falling back." >&2
   exit 1
 fi
-if [ "$future_bytes" -gt 4000000 ]; then
-  echo "failed: the fallback came to ${future_bytes} B. the modules were assembled instead of using the bundle." >&2
+if grep -q '__MMD_MODULES' "$work/future.html"; then
+  echo "failed: an unrecognised diagram type was sliced. the fallback has to bake the bundle." >&2
   exit 1
 fi
 
