@@ -320,7 +320,7 @@ Those calls only run when a document draws that kind of diagram. All of them tog
 
 **Which modules a document needs.** The build finds every ` ```mermaid ` block, reads its first effective line, and looks the word up in `DIAGRAM_MODULES`. `graph` and `flowchart` give the flowchart modules, `sequenceDiagram` gives the sequence module, and so on. Each entry names every piece its type reaches for, dagre goes in whenever anything is drawn, and the build then walks the static imports of everything it picked, so the shared modules come along. Everything else is left out.
 
-A prefix that names no module in the vendor stops the build. Without that, the table and a newer mermaid drift apart quietly: the document is baked without the module, and the diagram draws mermaid's error picture instead of itself.
+A prefix that names no module in the vendor is the same event as a head word the table does not know, and takes the same answer: the whole of mermaid. Leaving the module out instead is what has to be avoided, because the document bakes cleanly and the diagram draws mermaid's error picture where it should be. The package's own `verify` still fails on it, since EXAMPLE.md falling back to 3.6MB trips the size guard.
 
 A ` ```canvas ` block asks for nothing. The canvas parses the nodes and edges itself and never calls mermaid, which is why a document of canvas graphs alone carries no mermaid.
 
