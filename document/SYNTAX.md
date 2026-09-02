@@ -12,7 +12,7 @@ Leave `-o` out and it bakes next to the input with the extension swapped (`flow.
 
 The output is a single file with no external requests. marked and mermaid are carried inside it. It opens the same way on a corporate network, offline, or uploaded to Slack.
 
-Only the mermaid a document draws goes in. Flowcharts alone come to about 900KB, and a document with no diagram to about 180KB, against 3.4MB for the whole of mermaid. The build prints what it put in.
+Only the mermaid a document draws goes in. Flowcharts alone come to about 1.1MB, and a document with no diagram to about 215KB, against 3.6MB for the whole of mermaid. The build prints what it put in.
 
 ## Design
 
@@ -173,6 +173,8 @@ The canvas does not render mermaid. **It reads nodes, edges, labels and shapes, 
 |---|---|
 | node id and label | yes, as they are |
 | node shape `{}` `()` `[()]` `[/ /]` and the rest | yes, as the matching shape |
+| `A@{ shape: … , label: … }` | yes. A shape the canvas does not have becomes a rectangle |
+| edge id `A e1@--> B` and `e1@{ … }` | read far enough to keep the edge id from becoming a node. The canvas has no edge ids |
 | edge direction, label, dashes | yes |
 | `subgraph` | yes, as membership. Nested subgraphs are read, and a node belongs to the innermost one holding it |
 | `graph TD` / `LR` direction | ignored. The canvas decides the layout |
@@ -245,6 +247,19 @@ mermaid notation is taken as it is and drawn as the same shape on the canvas. Di
 | `A[/text/]` | parallelogram (I/O) |
 | `A[/text\]` | trapezoid (manual) |
 
+mermaid also names a shape rather than drawing it in punctuation, which is the only way to reach the shapes it added after the bracket notation ran out:
+
+```
+A@{ shape: sm-circ }
+B@{ shape: hex, label: "Prepare" }
+C@{
+  shape: lean-r
+  label: "Read"
+}
+```
+
+The canvas reads `shape` and `label` there and drops the other keys, which name things it has no way to draw such as an icon or an image. Every mermaid name that means one of the eleven shapes above maps to it, aliases included, so `db`, `cylinder` and `cyl` all come in as a cylinder. A name outside that set is drawn as a rectangle, and the document still renders it as itself.
+
 `-->`, `-.->` and `==>` come in as solid, dashed and thick. All of them can be changed in the inspector.
 
 ## Structure
@@ -276,7 +291,7 @@ Change the shell and **every document changes with it**. Bake them again. Do not
 open-package setup
 ```
 
-Fetches marked 12.0.2 as one minified file, and mermaid 10.9.1 as the npm tarball extracted into `source/vendor/mermaid/`. Both are pinned and checked against sha256. The bytes fetched here end up inside every document baked afterwards, so a hash mismatch fails and leaves nothing behind.
+Fetches marked 12.0.2 as one minified file, and mermaid 11.17.2 as the npm tarball extracted into `source/vendor/mermaid/`. Both are pinned and checked against sha256. The bytes fetched here end up inside every document baked afterwards, so a hash mismatch fails and leaves nothing behind.
 
 To raise a version, change the version and the hash together at the top of `source/fetch-vendor.sh`.
 
@@ -290,25 +305,29 @@ ADOC_VENDOR_BASE=https://<mirror>/npm open-package setup
 
 `source/mermaid_slice.py` does this, and `source/build.py` calls it once per bake.
 
-**What mermaid's `dist/` looks like.** It is not one bundle. There is an entry module, a set of shared modules under it (the renderer, the theme, d3, dompurify), and one module per diagram type sitting to the side. The entry reaches a diagram type by dynamic import:
+**What mermaid's `dist/` looks like.** It is not one bundle. There is an entry module and a set of chunks under `chunks/mermaid.esm.min/`: the shared ones (the renderer, the theme, d3, dompurify) and, to the side, the pieces of each diagram type. The entry reaches a diagram type by dynamic import:
 
 ```js
 // inside the entry module
-import("./flowDiagram-v2-f2119625.js")
-import("./sequenceDiagram-b517d154.js")
-import("./mindmap-definition-307c710a.js")
+import("./chunks/mermaid.esm.min/flowDiagram-YHGXBVSY.mjs")
+import("./chunks/mermaid.esm.min/sequenceDiagram-52ZFIFDL.mjs")
+import("./chunks/mermaid.esm.min/mindmap-definition-VBJCLQLM.mjs")
 ```
 
-Those calls only run when a document draws that kind of diagram. All of them together come to about 4.8MB. The entry and its shared modules come to 310KB, and adding flowcharts to that makes 590KB. The hash in each filename changes between mermaid releases, so nothing here may be pinned by filename.
+Those calls only run when a document draws that kind of diagram. All of them together come to about 3.4MB. The entry and its shared modules come to 736KB, and adding flowcharts to that makes 839KB. The hash in each filename changes between mermaid releases, so nothing here may be pinned by filename.
 
-**Which modules a document needs.** The build finds every ` ```mermaid ` block, reads its first effective line, and looks the word up in `DIAGRAM_MODULES`. `graph` and `flowchart` give the flowchart modules, `sequenceDiagram` gives the sequence module, and so on. It then walks the static imports of the entry and of the modules it picked, so the shared ones come along. Everything else is left out.
+**A type is more than one module, and they are not all in the entry.** mermaid keeps three registries of lazy loaders, and only the diagram types are in the entry. The parsers are behind a chunk of their own, and so are the layout algorithms, so `pie` reaches for its renderer, its parser and dagre from three different places. A specifier is written relative to the module that writes it, so a name means one module only once it has been resolved against its importer.
+
+**Which modules a document needs.** The build finds every ` ```mermaid ` block, reads its first effective line, and looks the word up in `DIAGRAM_MODULES`. `graph` and `flowchart` give the flowchart modules, `sequenceDiagram` gives the sequence module, and so on. Each entry names every piece its type reaches for, dagre goes in whenever anything is drawn, and the build then walks the static imports of everything it picked, so the shared modules come along. Everything else is left out.
+
+A prefix that names no module in the vendor stops the build. Without that, the table and a newer mermaid drift apart quietly: the document is baked without the module, and the diagram draws mermaid's error picture instead of itself.
 
 A ` ```canvas ` block asks for nothing. The canvas parses the nodes and edges itself and never calls mermaid, which is why a document of canvas graphs alone carries no mermaid.
 
 **Why the modules cannot just be pasted in.** They are ES modules, and they refer to each other by relative path:
 
 ```js
-import { a } from "./graph-0ee63739.js";
+import { a } from "./chunk-ZQN7UHIL.mjs";
 ```
 
 The browser resolves that against the URL of the module doing the importing. A module inlined into an HTML file has no URL of its own, so the path resolves against the document instead, which asks for a file that is not there.
@@ -324,14 +343,16 @@ A static import specifier has to be a literal string, so the URL has to exist be
 Dynamic imports take an expression rather than a literal, so those go through a lookup instead:
 
 ```js
-import(__mmdUrl("flowDiagram-v2-f2119625.js"))
+import(__mmdUrl("chunks/mermaid.esm.min/flowDiagram-YHGXBVSY.mjs"))
 ```
 
 That matters because a diagram module can be made after the entry that imports it, and the lookup happens when the diagram is drawn rather than when the entry is built. A name the lookup does not have returns a module that throws, and the block falls back to showing its source.
 
 **An unrecognised diagram type falls back to the whole of mermaid.** mermaid may have learned one `DIAGRAM_MODULES` has not, and a document that draws is worth more than a small one that cannot.
 
-The fallback inlines `dist/mermaid.min.js`, the UMD build of the same release, rather than assembling every module. It is 3.4MB against 4.8MB for the modules, because minifying across module boundaries is what a bundle can do and a set of published modules cannot. So the worst case here is the size a document was before any of this, never more.
+The fallback inlines `dist/mermaid.min.js`, the UMD build of the same release, rather than assembling every module. The two are within a few percent of each other in size, and the bundle is one script that puts mermaid on `window`, against a hundred modules that have to be ordered and rewritten to reach the same place.
+
+Which of the two went in is read off the loader rather than the size: only the sliced path emits one.
 
 `app.js` takes either. The UMD puts mermaid on `window` from a classic script, the sliced modules resolve one microtask later through `window.__mermaidReady`, and the first paint waits for whichever it got.
 
