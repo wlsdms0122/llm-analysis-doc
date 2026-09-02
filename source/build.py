@@ -59,15 +59,18 @@ def mermaid_runtime(markdown: str) -> tuple[str, str]:
     if not prefixes and not unknown:
         return "", "no diagram"
 
-    # A diagram type this build does not know is taken as a sign that the table is behind
-    # mermaid, not as a broken document. It gets the UMD bundle, which draws every type and
-    # is smaller than the modules for every type put together.
-    if unknown:
-        names = ", ".join(sorted(set(unknown)))
-        return mermaid_slice.bundle(VENDOR / "mermaid"), f"the whole of mermaid ({names} not recognised)"
+    # The table can be behind mermaid in two ways: a head word it does not know, and a module
+    # name this release no longer uses. Both are the table's problem rather than the
+    # document's, and both are answered with the UMD bundle, which draws every type. A
+    # document that draws is worth more than a small one that cannot.
+    missed: list[str] = []
+    if not unknown:
+        modules, missed = mermaid_slice.select(VENDOR / "mermaid", prefixes)
+        if not missed:
+            return mermaid_slice.runtime(VENDOR / "mermaid", modules), f"mermaid, {len(modules)} modules"
 
-    modules = mermaid_slice.select(VENDOR / "mermaid", prefixes)
-    return mermaid_slice.runtime(VENDOR / "mermaid", modules), f"mermaid, {len(modules)} modules"
+    behind = ", ".join(sorted(set(unknown) | set(missed)))
+    return mermaid_slice.bundle(VENDOR / "mermaid"), f"the whole of mermaid ({behind} not recognised)"
 
 
 def parse_frontmatter(src: str) -> dict:

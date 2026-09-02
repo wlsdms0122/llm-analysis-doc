@@ -19,9 +19,8 @@ ENTRY = "mermaid.esm.min.mjs"
 EXPORT = "default"
 
 # The UMD build of the same release: every diagram type, minified as one program, and it
-# puts mermaid on `window` from a classic script. It is smaller than the modules for every
-# type put together, because minifying across module boundaries is what a bundle can do and
-# a set of published modules cannot.
+# puts mermaid on `window` from a classic script. It draws whatever the document turns out
+# to hold, which is what makes it the answer when the table cannot say.
 BUNDLE = "mermaid.min.js"
 
 # A specifier is relative to the module that writes it, and the modules sit two directories
@@ -151,7 +150,7 @@ def needed_prefixes(markdown: str) -> tuple[list[str], list[str]]:
             unknown.append(word)
         if "$$" in src:
             prefixes += KATEX_MODULES
-    return prefixes, unknown
+    return list(dict.fromkeys(prefixes)), unknown
 
 
 def bundle(vendor: pathlib.Path) -> str:
@@ -162,7 +161,8 @@ def bundle(vendor: pathlib.Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _entry_module(vendor: pathlib.Path) -> str:
+def _require_entry(vendor: pathlib.Path) -> str:
+    """The entry module, once the vendor has been found to hold it."""
     entry = vendor / ENTRY
     if not entry.exists():
         raise VendorMissing(f"source/vendor/mermaid/{ENTRY} is missing.")
@@ -180,13 +180,14 @@ def _imports(vendor: pathlib.Path, name: str) -> tuple[set[str], set[str]]:
             {_resolve(name, m) for m in DYNAMIC_IMPORT.findall(text)})
 
 
-def select(vendor: pathlib.Path, prefixes: list[str]) -> list[str]:
-    """Modules to bake, in an order where a module comes after everything it imports.
+def select(vendor: pathlib.Path, prefixes: list[str]) -> tuple[list[str], list[str]]:
+    """Modules to bake, and the prefixes the vendor holds nothing for.
 
     The order matters because a module's blob URL is only known once it has been made, and a
-    static import needs that URL written into the text.
+    static import needs that URL written into the text, so a module comes after everything it
+    imports.
     """
-    root = _entry_module(vendor)
+    root = _require_entry(vendor)
 
     def named(name: str, patterns: list[str]) -> bool:
         base = pathlib.PurePosixPath(name).name
@@ -207,14 +208,11 @@ def select(vendor: pathlib.Path, prefixes: list[str]) -> list[str]:
         pending += [n for n in static if n not in reachable]
         pending += [n for n in dynamic if n not in reachable and named(n, prefixes)]
 
-    # A prefix that named nothing means the table and the vendor have drifted apart. The
-    # document would be baked without the module and the diagram it belongs to draws as
-    # mermaid's error picture, which the build cannot see.
-    missed = [p for p in dict.fromkeys(prefixes) if not any(named(n, [p]) for n in reachable)]
-    if missed:
-        raise VendorMissing(
-            "no module in source/vendor/mermaid/ is named " + ", ".join(missed)
-            + ". the table in mermaid_slice.py and this mermaid release disagree.")
+    # A prefix that named nothing means the table and this release have drifted apart, which
+    # is the same event as a head word the table does not know. It is answered the same way,
+    # by the caller, rather than by leaving the module out: a document baked without it draws
+    # mermaid's error picture where the diagram should be, and nothing here can see that.
+    missed = [p for p in prefixes if not any(named(n, [p]) for n in reachable)]
 
     # mermaid's dist has no import cycle, so a plain post order is a valid load order.
     order: list[str] = []
@@ -231,7 +229,7 @@ def select(vendor: pathlib.Path, prefixes: list[str]) -> list[str]:
 
     for name in sorted(reachable):
         visit(name)
-    return order
+    return order, missed
 
 
 def runtime(vendor: pathlib.Path, modules: list[str]) -> str:
@@ -242,7 +240,7 @@ def runtime(vendor: pathlib.Path, modules: list[str]) -> str:
     order. A dynamic import goes through `__mmdUrl` instead, because the diagram modules are
     loaded lazily and a diagram module can be made after the module that imports it.
     """
-    root = _entry_module(vendor)
+    root = _require_entry(vendor)
     payload = []
     for name in modules:
         text = (vendor / name).read_text(encoding="utf-8")
