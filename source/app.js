@@ -526,7 +526,7 @@
   // mermaid's `@{ shape: ... }` names, against the shapes the canvas draws. A name outside
   // this table becomes a rectangle, which is what a shape carrying no meaning here should
   // look like.
-  var SHAPE_ALIASES = {
+  var SHAPE_ALIASES = Object.assign(Object.create(null), {
     rounded: 'round', event: 'round',
     stadium: 'stadium', terminal: 'stadium', pill: 'stadium',
     'fr-rect': 'subroutine', subprocess: 'subroutine', subproc: 'subroutine',
@@ -546,7 +546,7 @@
     'trap-b': 'trapezoid', priority: 'trapezoid', 'trapezoid-bottom': 'trapezoid',
     trapezoid: 'trapezoid', 'trap-t': 'trapezoid', manual: 'trapezoid',
     'trapezoid-top': 'trapezoid', 'inv-trapezoid': 'trapezoid'
-  };
+  });
 
   var META = /^@\{(.*)\}$/;
   var META_ENTRY = /([\w-]+)\s*:\s*(?:"([^"]*)"|'([^']*)'|([^,}]*))/g;
@@ -598,24 +598,52 @@
 
   function stripQuotes(s) { return String(s).replace(/^"(.*)"$/, '$1').replace(/<br\s*\/?>/gi, ' '); }
 
+  // Whether a `@{` is still open where the line ends. A brace inside a label is text, so
+  // the scan carries the quote it is in.
+  function metaOpen(line, open) {
+    var quote = '';
+    for (var i = 0; i < line.length; i++) {
+      var c = line.charAt(i);
+      if (quote) { if (c === quote) quote = ''; continue; }
+      if (c === '"' || c === "'") { quote = c; continue; }
+      if (!open && c === '@' && line.charAt(i + 1) === '{') { open = true; i++; continue; }
+      if (open && c === '}') open = false;
+    }
+    return open;
+  }
+
   function parseGraph(src, seed) {
-    var g = seed || { nodes: [], edges: [], map: {} };
+    // The map is keyed by node id, and an id such as `constructor` or `toString` answers a
+    // plain object before anything has been put in it. Such a node would be taken as already
+    // seen and never drawn.
+    var g = seed || { nodes: [], edges: [], map: Object.create(null) };
     // Subgraphs nest, so the open ones are a stack and a node belongs to the innermost one.
     // Emptying the name at `end` takes the outer group off every member that follows it.
     var open = [];
     function group() { return open[open.length - 1] || ''; }
     // `id@{ ... }` may be written over several lines, one entry to a line. Folding it onto a
     // single line keeps the rest of the parser reading a line at a time, and the line break
-    // becomes the comma that separates two entries written side by side.
-    var text = String(src).replace(/@\{[^}]*\}/g, function (block) {
-      return block.replace(/\s*\n\s*/g, ', ');
-    });
-    // `A e1@--> B` names the edge. The canvas has no edge ids, and holding the names keeps a
-    // later `e1@{ ... }` from being read as a node of its own.
-    var edgeIds = {};
-    text.split('\n').forEach(function (rawLine) {
+    // becomes the comma that separates two entries written side by side. This runs after a
+    // comment is gone, so a stray `@{` inside one opens nothing.
+    var lines = [], held = false;
+    String(src).split('\n').forEach(function (rawLine) {
       var line = rawLine.replace(/%%.*$/, '').trim();
       if (!line) return;
+      if (held) lines[lines.length - 1] += ', ' + line;
+      else lines.push(line);
+      held = metaOpen(line, held);
+    });
+
+    // `A e1@--> B` names the edge. The canvas has no edge ids, and holding the names keeps a
+    // later `e1@{ ... }` from being read as a node of its own. Every line is read for them
+    // first, because the two may be written in either order.
+    var edgeIds = Object.create(null);
+    lines.forEach(function (line) {
+      var found, re = /(?:^|\s)([\w.$-]+)@(?=[-=])/g;
+      while ((found = re.exec(line))) edgeIds[found[1]] = true;
+    });
+
+    lines.forEach(function (line) {
       if (/^(graph|flowchart)\b/i.test(line)) return;
       if (/^(classDef|class|style|linkStyle|click|direction)\b/i.test(line)) return;
       var sg = line.match(/^subgraph\s+(.+)$/i);
@@ -639,7 +667,7 @@
         var lm = piece.match(/^\s*\|([^|]*)\|\s*/);
         if (lm) { edgeLabel = stripQuotes(lm[1]); piece = piece.slice(lm[0].length); }
         var named = piece.match(/\s([\w.-]+)@\s*$/);
-        if (named) { edgeIds[named[1]] = true; piece = piece.slice(0, named.index); }
+        if (named) piece = piece.slice(0, named.index);
         var id = parseToken(piece, g, group());
         if (id == null) {
           if (piece.trim() && prev != null) links[i] = piece.trim();
