@@ -14,6 +14,8 @@ the capture: the drawing, the capture at the same width, and the capture over th
 half opacity.
 """
 
+from __future__ import annotations
+
 import argparse
 import base64
 import html
@@ -157,6 +159,9 @@ def main() -> int:
         build.build(md, page)
         if args.compare:
             shots = shoot(page, ["light"], args.figure, "screen")
+            if len(shots) > 1:
+                print(f"{len(shots)} figures match {args.figure!r}. give its number in document order instead", file=sys.stderr)
+                return 1
             if not shots or not shots[0]["png"]:
                 print("the figure could not be drawn", file=sys.stderr)
                 return 1

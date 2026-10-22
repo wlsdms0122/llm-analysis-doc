@@ -178,7 +178,7 @@ The name after the fence is the caption, as with mermaid.
 |---|---|
 | `frame: …` | Before `html:`. `phone` (the default) draws the bezel, status bar and home indicator around a 375px screen. `browser` draws a window with `url:` in its address bar. `none` draws the drawing alone |
 | `width: 480` | The drawing's width for `browser` and `none`. Without it the drawing takes the width of its content |
-| `html:` | The drawing, indented under it. Blank lines inside are kept |
+| `html:` | The drawing, on the lines after it. It runs until the next note or figure line at the `html:` column or left of it, so a `<pre>` or a template literal may start at column 0. Blank lines inside are kept |
 | `- name` | A note. The name goes on its card |
 | `- name [planned]` | A part the product does not have yet. It is hatched over the drawing and tagged on its card |
 | `at: …` | What the note points at (below) |
@@ -194,10 +194,10 @@ The name after the fence is the caption, as with mermaid.
 
 A selector can be anything `querySelector` takes. Badges stand beside the drawing in the order their parts come down it, a tall part meeting its leader near its top, so a container and the parts inside it read in order.
 
-**The drawing is the document's own HTML.** It is drawn inside the figure's shadow root, so the shell's styles do not reach in. Its `<style>` is rewritten to start at the drawing, so it reaches neither the annotations nor another figure. Class names starting with `sf-` belong to the frame and the annotations.
+**The drawing is the document's own HTML.** It is drawn inside the figure's shadow root, so the shell's styles do not reach in. Its `<style>` is rewritten to start at the drawing, so it reaches neither the annotations nor another figure. Class names and `data-` attributes starting with `sf-` belong to the frame and the annotations.
 
-- **Scripts run.** An inline `<script>` runs once the drawing is in the page, with the figure's shadow root as `root` and the drawing element as `drawing`, so `root.getElementById('chart')` finds the canvas. A script with `src` is not run, since the document makes no requests. Opening a document runs its scripts, the same trust as opening any HTML file.
-- **Images are carried.** A relative path in `src`, `href` or `poster` that names a file next to the markdown goes into the document as a data URL when it is baked. The markdown keeps the path, so "Export MD" still hands back the file as it was, and the HTML opens anywhere on its own. The build prints how much went in.
+- **Scripts run.** An inline `<script>` runs once the drawing is in the page, with the figure's shadow root as `root` and the drawing element as `drawing`, so `drawing.querySelector('#chart')` finds the canvas. In ```cards every drawing shares one root, so look things up through `drawing`. A script with `src` is not run, since the document makes no requests. Opening a document runs its scripts, the same trust as opening any HTML file.
+- **Images are carried.** A relative path in `src` or `poster`, or an image path in `href` (an svg `<image>`), that names a file next to the markdown goes into the document as a data URL when it is baked. The markdown keeps the path, so "Export MD" still hands back the file as it was, and the HTML opens anywhere on its own. The build prints how much went in.
 - **App UI comes from `ui-*` classes.** `ui-nav`, `ui-stack`, `ui-text xl bold`, `ui-button gray`, `ui-item`, `ui-notice`, `ui-card`, `ui-sheet`, `ui-tabbar`, `ui-icon share` and the rest. `open-package catalog` bakes every class and icon with its markup. The classes only set what the preset owns, so a drawing written with them looks right in any preset, and its own `<style>` can read the preset as `var(--ui-accent)`, `var(--ui-pad)` and the rest.
 
 **The drawing keeps its own look.** The `ui-*` values come from a preset rather than from the document theme, so a dark document still shows an app screen as it is designed. Only what is outside the drawing (badges, leaders, cards) follows the theme. The preset is picked once for the document with `ui-theme` in the frontmatter: `default`, `ios`, `material` or `toss`.

@@ -92,17 +92,6 @@ window.Annotated = (function () {
     return root.children;
   }
 
-  // The source lines a run of nodes spans, blank ones included, with the indentation they
-  // have relative to the first of them.
-  function rawLines(nodes, lines) {
-    if (!nodes.length) return '';
-    var last = nodes[nodes.length - 1];
-    while (last.children.length) last = last.children[last.children.length - 1];
-    var out = lines.slice(nodes[0].at, last.at + 1);
-    var base = out[0].match(/^[ \t]*/)[0].length;
-    return out.map(function (l) { return l.slice(Math.min(base, l.match(/^[ \t]*/)[0].length)); }).join('\n');
-  }
-
   // name | type | meaning. Only the first two `|` separate, and none inside quotes or a code
   // span, so a meaning keeps its pipes and a type like `"A" | "B"` can be written in backticks.
   function splitField(value) {
@@ -132,14 +121,40 @@ window.Annotated = (function () {
   var FIGURE_KEYS = { annotated: { frame: 1, width: 1, url: 1, html: 1 }, cards: {} };
   var ENTRY_KEYS = { annotated: { at: 1, note: 1 }, cards: { note: 1, html: 1, field: 1 } };
 
+  // An html: block is the drawing's own text, so its lines are taken as they are rather than
+  // read as the figure's tree: it runs until the next line, at the key's column or left of
+  // it, that is a note or one of the figure's keys. A template literal or a <pre> may then
+  // start at column 0. The lines are blanked out of what the tree reads.
+  function takeBlocks(kind, lines) {
+    var keys = Object.assign({}, FIGURE_KEYS[kind], ENTRY_KEYS[kind]), blocks = {};
+    for (var i = 0; i < lines.length; i++) {
+      var m = lines[i].match(/^([ \t]*)html\s*:\s*(.*)$/i);
+      if (!m) continue;
+      var col = m[1].replace(/\t/g, '    ').length, body = [];
+      for (var j = i + 1; j < lines.length; j++) {
+        var l = lines[j], ind = l.match(/^[ \t]*/)[0].replace(/\t/g, '    ').length, km = l.trim().match(KEY_RE);
+        if (l.trim() && ind <= col && (ENTRY_RE.test(l.trim()) || (km && keys[km[1].toLowerCase()]))) break;
+        body.push(l);
+      }
+      while (body.length && !body[body.length - 1].trim()) body.pop();
+      var base = Math.min.apply(null, body.filter(function (l) { return l.trim(); }).map(function (l) { return l.match(/^[ \t]*/)[0].length; }).concat([Infinity]));
+      if (!isFinite(base)) base = 0;
+      blocks[i] = (m[2].trim() ? m[2].trim() + '\n' : '') + body.map(function (l) { return l.slice(Math.min(base, l.match(/^[ \t]*/)[0].length)); }).join('\n');
+      for (var k = i + 1; k < i + 1 + body.length; k++) lines[k] = '';
+      i += body.length;
+    }
+    return blocks;
+  }
+
   function parse(kind, src, warn) {
     var lines = String(src).split('\n'), opts = {}, entries = [], html = null;
+    var blocks = takeBlocks(kind, lines);
     outline(lines).forEach(function (n) {
       var em = n.text.match(ENTRY_RE);
-      if (em) { entries.push(parseEntry(kind, em[1], !!em[2], n.children, lines, warn)); return; }
+      if (em) { entries.push(parseEntry(kind, em[1], !!em[2], n.children, blocks, warn)); return; }
       var km = n.text.match(KEY_RE), key = km ? km[1].toLowerCase() : '';
       if (km && FIGURE_KEYS[kind][key] && !entries.length) {
-        if (key === 'html') html = (trim(km[2]) ? trim(km[2]) + '\n' : '') + rawLines(n.children, lines);
+        if (key === 'html') html = blocks[n.at];
         else opts[key] = trim(km[2]);
         return;
       }
@@ -148,7 +163,7 @@ window.Annotated = (function () {
     return { opts: opts, entries: entries, html: html };
   }
 
-  function parseEntry(kind, name, planned, children, lines, warn) {
+  function parseEntry(kind, name, planned, children, blocks, warn) {
     var e = { name: name, planned: planned, at: null, notes: [], fields: [], html: null };
     children.forEach(function (c) {
       var km = c.text.match(KEY_RE);
@@ -157,7 +172,7 @@ window.Annotated = (function () {
       else if (key === 'at') e.at = parseAt(value);
       else if (key === 'note') e.notes.push(value);
       else if (key === 'field') e.fields.push(splitField(value));
-      else e.html = (value ? value + '\n' : '') + rawLines(c.children, lines);
+      else e.html = blocks[c.at];
     });
     return e;
   }
@@ -239,9 +254,9 @@ window.Annotated = (function () {
     var marks = '', badges = '', notes = '';
     model.entries.forEach(function (e, i) {
       var n = i + 1;
-      marks += '<div class="sf-mark' + (e.planned ? ' planned' : '') + '" data-n="' + n + '"></div>';
-      badges += '<div class="sf-badge" data-n="' + n + '">' + n + '</div>';
-      notes += '<li class="sf-note" data-n="' + n + '"><span class="sf-num" data-n="' + n + '">' + n + '</span><div>' +
+      marks += '<div class="sf-mark' + (e.planned ? ' planned' : '') + '" data-sf-n="' + n + '"></div>';
+      badges += '<div class="sf-badge" data-sf-n="' + n + '">' + n + '</div>';
+      notes += '<li class="sf-note" data-sf-n="' + n + '"><span class="sf-num" data-sf-n="' + n + '">' + n + '</span><div>' +
         '<div class="sf-note-name">' + esc(e.name) + tag(e.planned) + '</div>' +
         e.notes.map(function (l) { return '<div class="sf-note-line">' + ctx.inline(l) + '</div>'; }).join('') + '</div></li>';
     });
@@ -301,8 +316,10 @@ window.Annotated = (function () {
     var dr = device.getBoundingClientRect(), scale = dr.width / device.offsetWidth || 1;
     return fig.entries.map(function (e) {
       if (!e.at) return null;
-      var el = e.at.sel ? d.querySelector(e.at.sel) : d;
-      if (!el) return { missing: true };
+      var el;
+      try { el = e.at.sel ? d.querySelector(e.at.sel) : d; }
+      catch (err) { return { missing: true, why: 'is not a selector' }; }
+      if (!el) return { missing: true, why: 'finds nothing in the drawing' };
       var r = el.getBoundingClientRect();
       var box = { el: el, sub: !!e.at.box, x: (r.left - dr.left) / scale, y: (r.top - dr.top) / scale, w: r.width / scale, h: r.height / scale };
       if (e.at.box) { box.x += e.at.box[0]; box.y += e.at.box[1]; box.w = e.at.box[2]; box.h = e.at.box[3]; }
@@ -340,7 +357,7 @@ window.Annotated = (function () {
       marks[i].classList.toggle('off', !on);
       marks[i].classList.toggle('box', !!(on && b.sub));
       badges[i].classList.toggle('off', !on);
-      if (b && b.missing) missing.push(fig.entries[i].name + ': at: ' + fig.entries[i].at.source + ' finds nothing in the drawing');
+      if (b && b.missing) missing.push(fig.entries[i].name + ': at: ' + fig.entries[i].at.source + ' ' + b.why);
       if (!on) return;
       marks[i].style.left = b.x + 'px'; marks[i].style.top = b.y + 'px';
       marks[i].style.width = Math.max(4, b.w) + 'px'; marks[i].style.height = Math.max(4, b.h) + 'px';
@@ -357,9 +374,9 @@ window.Annotated = (function () {
       notes[i].style.top = ny + 'px';
       lastNote = ny + notes[i].offsetHeight + 8;
       var edge = Math.min(dw + 4, b.x + b.w);
-      paths += '<path data-n="' + n + '" d="M' + (dw + 4) + ' ' + cy + 'L' + (bx - 11) + ' ' + by + '"/>' +
-        '<path data-n="' + n + '" d="M' + (bx + 11) + ' ' + by + 'H' + (nx - 8) + 'V' + (ny + 20) + 'H' + nx + '"/>';
-      if (!b.sub && edge < dw - 6) paths += '<path data-n="' + n + '" d="M' + edge + ' ' + cy + 'H' + (dw + 4) + '"/>';
+      paths += '<path data-sf-n="' + n + '" d="M' + (dw + 4) + ' ' + cy + 'L' + (bx - 11) + ' ' + by + '"/>' +
+        '<path data-sf-n="' + n + '" d="M' + (bx + 11) + ' ' + by + 'H' + (nx - 8) + 'V' + (ny + 20) + 'H' + nx + '"/>';
+      if (!b.sub && edge < dw - 6) paths += '<path data-sf-n="' + n + '" d="M' + edge + ' ' + cy + 'H' + (dw + 4) + '"/>';
     });
     // Entries that point at nothing still list their note, after the rest.
     if (!stacked) {
@@ -392,12 +409,12 @@ window.Annotated = (function () {
     function light(n) {
       if (n === cur) return;
       cur = n;
-      each(root.querySelectorAll('.hl'), function (el) { el.classList.remove('hl'); });
-      if (n) each(root.querySelectorAll('[data-n="' + n + '"]'), function (el) { el.classList.add('hl'); });
+      each(root.querySelectorAll('.sf-hl'), function (el) { el.classList.remove('sf-hl'); });
+      if (n) each(root.querySelectorAll('[data-sf-n="' + n + '"]'), function (el) { el.classList.add('sf-hl'); });
     }
     root.addEventListener('mouseover', function (e) {
-      var t = e.target.closest ? e.target.closest('[data-n]') : null;
-      if (t) return light(t.getAttribute('data-n'));
+      var t = e.target.closest ? e.target.closest('[data-sf-n]') : null;
+      if (t) return light(t.getAttribute('data-sf-n'));
       var hit = null;
       // The innermost element an entry points at wins, so a part inside a larger region is reachable.
       (fig.found || []).forEach(function (b, i) {
@@ -451,7 +468,7 @@ window.Annotated = (function () {
   function selectorOf(el, d) {
     var parts = [];
     while (el && el !== d) {
-      if (el.id) { parts.unshift('#' + el.id); return parts.join(' > '); }
+      if (el.id) { parts.unshift('#' + CSS.escape(el.id)); return parts.join(' > '); }
       var k = 1, s = el;
       while ((s = s.previousElementSibling)) if (s.localName === el.localName) k++;
       parts.unshift(el.localName + ':nth-of-type(' + k + ')');
@@ -505,7 +522,7 @@ window.Annotated = (function () {
         var r = device.getBoundingClientRect(), sc = r.width / device.offsetWidth || 1, ar = anchor.getBoundingClientRect();
         var ox = (ar.left - r.left) / sc, oy = (ar.top - r.top) / sc;
         var box = [Math.min(s0.x, p.x) - ox, Math.min(s0.y, p.y) - oy, w, h].map(Math.round).join(', ');
-        line = 'at: ' + (anchor === d ? '' : '#' + anchor.id + ' ') + box;
+        line = 'at: ' + (anchor === d ? '' : '#' + CSS.escape(anchor.id) + ' ') + box;
       }
       done(line);
     });
@@ -542,7 +559,7 @@ window.Annotated = (function () {
     });
     each(clone.querySelectorAll('.sf-pick, script'), function (el) { el.remove(); });
     each(clone.querySelectorAll('*'), function (el) {
-      el.classList.remove('hl');
+      el.classList.remove('sf-hl');
       // HTML takes attribute names XML does not (`@click`, `:class`), and one of them makes the SVG unreadable.
       Array.prototype.slice.call(el.attributes).forEach(function (a) {
         if (!/^[A-Za-z_][\w.-]*$/.test(a.name)) el.removeAttribute(a.name);
@@ -553,6 +570,9 @@ window.Annotated = (function () {
     while (walker.nextNode()) dead.push(walker.currentNode);
     dead.forEach(function (n) { n.remove(); });
     if (screen) {
+      // Outside its frame the frame's size rules no longer reach it, so the size it has is written on.
+      clone.style.width = screen.offsetWidth + 'px';
+      clone.style.minHeight = screen.offsetHeight + 'px';
       var wrap = document.createElement('div');
       wrap.className = 'sf';
       wrap.setAttribute('data-preset', box.getAttribute('data-preset'));

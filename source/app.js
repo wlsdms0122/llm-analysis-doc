@@ -3028,9 +3028,14 @@
       if (window.__mermaidReady) await window.__mermaidReady.catch(function () { });
       var want = SHOT.get('figure'), part = SHOT.get('part') || '';
       var figs = $$('#doc .figure').filter(function (f) { return !f.classList.contains('canvas-only'); });
+      var taken = {};
       var named = figs.map(function (f, i) {
         var cap = ($('.cap', f) || {}).textContent || '';
-        return { fig: f, name: slug(cap.trim()) !== 'sec' && cap.trim() ? slug(cap.trim()) : 'figure-' + (i + 1), cap: cap.trim(), n: String(i + 1) };
+        var name = cap.trim() ? slug(cap.trim()) : 'figure-' + (i + 1);
+        // Two figures with one caption still get two files.
+        taken[name] = (taken[name] || 0) + 1;
+        if (taken[name] > 1) name += '-' + taken[name];
+        return { fig: f, name: name, cap: cap.trim(), n: String(i + 1) };
       }).filter(function (x) { return !want || x.cap === want || x.name === slug(want) || x.n === want; });
       if (!named.length) return finish('no figure matches "' + want + '"');
       var themes = (SHOT.get('themes') || 'light,dark').split(',');

@@ -24,6 +24,7 @@ import html
 import json
 import mimetypes
 import pathlib
+import urllib.parse
 import re
 import sys
 
@@ -100,7 +101,13 @@ def slugify(s: str) -> str:
 
 
 # A file a drawing names by a path relative to the markdown (`<img src="./capture.png">`).
-ASSET_RE = re.compile(r"""\b(?:src|href|poster)\s*=\s*["']([^"'#?]+)["']""")
+# `href` counts only for an image, as in an svg <image>. A link to another file stays a link.
+ASSET_RE = re.compile(r"""(?<![\w-])(?:src|poster|href(?=\s*=\s*["'][^"']+\.(?:png|jpe?g|gif|webp|avif|svg)["']))\s*=\s*["']([^"'#?]+)["']""", re.I)
+
+
+def asset_path(written: str) -> str:
+    """The file a written path names: entities and percent escapes undone, as a browser would."""
+    return urllib.parse.unquote(html.unescape(written))
 
 
 def assets(markdown: str, base: pathlib.Path) -> tuple[dict, str]:
@@ -108,10 +115,12 @@ def assets(markdown: str, base: pathlib.Path) -> tuple[dict, str]:
     saying what went in. The markdown keeps the path, so "Export MD" still hands back the
     file the build read, and the document carries the bytes."""
     found = {}
-    for path in sorted(set(ASSET_RE.findall(markdown))):
+    for written in sorted(set(ASSET_RE.findall(markdown))):
+        # The key is the attribute's value as the page reads it, entities undone.
+        path = html.unescape(written)
         if re.match(r"^[a-z][\w+.-]*:", path, re.I) or path.startswith("/"):
             continue
-        file = (base / path).resolve()
+        file = (base / asset_path(written)).resolve()
         if not file.is_file():
             continue
         mime = mimetypes.guess_type(file.name)[0] or "application/octet-stream"

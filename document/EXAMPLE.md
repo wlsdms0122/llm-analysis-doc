@@ -164,7 +164,7 @@ html:
     <div class="ui-row"><button class="ui-button small gray" id="next">다음 달</button></div>
   </div>
   <script>
-    const g = root.getElementById('bars').getContext('2d');
+    const g = drawing.querySelector('#bars').getContext('2d');
     const months = [12, 18, 9, 22, 30, 26];
     function paint() {
       g.clearRect(0, 0, 420, 180);
@@ -173,7 +173,7 @@ html:
         g.fillRect(10 + i * 70, 176 - v * 5, 44, v * 5);
       });
     }
-    root.getElementById('next').onclick = () => { months.push(5 + Math.round(Math.random() * 25)); months.shift(); paint(); };
+    drawing.querySelector('#next').onclick = () => { months.push(5 + Math.round(Math.random() * 25)); months.shift(); paint(); };
     paint();
   </script>
 - this month
