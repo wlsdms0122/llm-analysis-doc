@@ -14,6 +14,7 @@ Optional frontmatter on the input:
     kicker: TossBank iOS
     subtitle: 2026-08-28 draft
     slug: native-sign-flow
+    ui-theme: toss
     ---
 """
 
@@ -21,7 +22,9 @@ import argparse
 import base64
 import html
 import json
+import mimetypes
 import pathlib
+import urllib.parse
 import re
 import sys
 
@@ -84,7 +87,9 @@ def parse_frontmatter(src: str) -> dict:
         k, _, v = line.partition(":")
         if not _:
             continue
-        meta[k.strip()] = v.strip().strip("'\"")
+        v = v.strip()
+        # A quoted value is taken whole. An unquoted one ends where a ` #` comment starts.
+        meta[k.strip()] = v.strip("'\"") if v[:1] in "'\"" else re.sub(r"\s+#.*$", "", v)
     return meta
 
 
@@ -93,6 +98,37 @@ def slugify(s: str) -> str:
     s = re.sub(r"[^\w\- ]+", "", s.strip().lower())
     s = re.sub(r"\s+", "-", s).strip("-")
     return s or "analysis"
+
+
+# A file a drawing names by a path relative to the markdown (`<img src="./capture.png">`).
+# `href` counts only for an image, as in an svg <image>. A link to another file stays a link.
+ASSET_RE = re.compile(r"""(?<![\w-])(?:src|poster|href(?=\s*=\s*["'][^"']+\.(?:png|jpe?g|gif|webp|avif|svg)["']))\s*=\s*["']([^"'#?]+)["']""", re.I)
+
+
+def asset_path(written: str) -> str:
+    """The file a written path names: entities and percent escapes undone, as a browser would."""
+    return urllib.parse.unquote(html.unescape(written))
+
+
+def assets(markdown: str, base: pathlib.Path) -> tuple[dict, str]:
+    """Relative path as written -> data URL, for every such file that exists, and one line
+    saying what went in. The markdown keeps the path, so "Export MD" still hands back the
+    file the build read, and the document carries the bytes."""
+    found = {}
+    for written in sorted(set(ASSET_RE.findall(markdown))):
+        # The key is the attribute's value as the page reads it, entities undone.
+        path = html.unescape(written)
+        if re.match(r"^[a-z][\w+.-]*:", path, re.I) or path.startswith("/"):
+            continue
+        file = (base / asset_path(written)).resolve()
+        if not file.is_file():
+            continue
+        mime = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+        found[path] = f"data:{mime};base64," + base64.b64encode(file.read_bytes()).decode("ascii")
+    if not found:
+        return found, ""
+    size = sum(len(v) for v in found.values()) / 1024
+    return found, f"{len(found)} asset{'s' if len(found) > 1 else ''} ({size:.0f} KB)"
 
 
 def inline_js(text: str) -> str:
@@ -104,6 +140,7 @@ def build(md_path: pathlib.Path, out_path: pathlib.Path) -> tuple[pathlib.Path, 
     src = read(md_path)
     meta = parse_frontmatter(src)
     mermaid, mermaid_note = mermaid_runtime(src)
+    files, files_note = assets(src, md_path.resolve().parent)
 
     body = re.sub(r"^---\r?\n.*?\r?\n---\r?\n?", "", src, count=1, flags=re.S)
     first_h1 = re.search(r"^#\s+(.+)$", body, re.M)
@@ -126,12 +163,15 @@ def build(md_path: pathlib.Path, out_path: pathlib.Path) -> tuple[pathlib.Path, 
         "CONTENT_B64": base64.b64encode(src.encode("utf-8")).decode("ascii"),
         "META_JSON": inline_js(
             json.dumps(
-                {"title": title, "slug": slug, "kicker": kicker, "subtitle": subtitle},
+                {"title": title, "slug": slug, "kicker": kicker, "subtitle": subtitle, "uiTheme": meta.get("ui-theme", "")},
                 ensure_ascii=False,
             )
         ),
         "VENDOR_MARKED": inline_js(read_vendor("marked.min.js")),
         "VENDOR_MERMAID": inline_js(mermaid),
+        "ASSETS_JSON": json.dumps(files).replace("</", "<\\/"),
+        "ANNOTATED_STYLE": read(HERE / "annotated.css"),
+        "ANNOTATED": inline_js(read(HERE / "annotated.js")),
         "APP": inline_js(read(HERE / "app.js")),
     }
     # One pass. Substituting in sequence would let a `{{...}}` inside an already inserted
@@ -140,7 +180,7 @@ def build(md_path: pathlib.Path, out_path: pathlib.Path) -> tuple[pathlib.Path, 
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(out, encoding="utf-8")
-    return out_path, mermaid_note
+    return out_path, ", ".join(filter(None, [mermaid_note, files_note]))
 
 
 def main() -> int:
