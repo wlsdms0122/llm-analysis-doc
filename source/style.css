@@ -415,7 +415,7 @@ body.nav-resizing .nav-handle-bar { background: var(--accent); height: 56px; }
   color: var(--fg); white-space: pre; overflow-x: auto;
 }
 .figure.showsrc .mermaid-out, .figure.showsrc .sf-out { display: none; }
-.figure.screen .figure-body { text-align: left; padding: 22px; }
+.figure.annotated .figure-body { text-align: left; padding: 22px; }
 .figure-bar button.label { width: auto; padding: 0 6px; font-size: 9.5px; font-weight: 600; letter-spacing: .06em; }
 .figure-bar button.on { color: var(--accent); border-color: var(--accent); }
 .figure-body svg { max-width: 100%; height: auto; }

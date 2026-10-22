@@ -22,6 +22,7 @@ import argparse
 import base64
 import html
 import json
+import mimetypes
 import pathlib
 import re
 import sys
@@ -98,6 +99,29 @@ def slugify(s: str) -> str:
     return s or "analysis"
 
 
+# A file a drawing names by a path relative to the markdown (`<img src="./capture.png">`).
+ASSET_RE = re.compile(r"""\b(?:src|href|poster)\s*=\s*["']([^"'#?]+)["']""")
+
+
+def assets(markdown: str, base: pathlib.Path) -> tuple[dict, str]:
+    """Relative path as written -> data URL, for every such file that exists, and one line
+    saying what went in. The markdown keeps the path, so "Export MD" still hands back the
+    file the build read, and the document carries the bytes."""
+    found = {}
+    for path in sorted(set(ASSET_RE.findall(markdown))):
+        if re.match(r"^[a-z][\w+.-]*:", path, re.I) or path.startswith("/"):
+            continue
+        file = (base / path).resolve()
+        if not file.is_file():
+            continue
+        mime = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+        found[path] = f"data:{mime};base64," + base64.b64encode(file.read_bytes()).decode("ascii")
+    if not found:
+        return found, ""
+    size = sum(len(v) for v in found.values()) / 1024
+    return found, f"{len(found)} asset{'s' if len(found) > 1 else ''} ({size:.0f} KB)"
+
+
 def inline_js(text: str) -> str:
     """Keeps an inline <script> from ending early."""
     return text.replace("</script", "<\\/script").replace("<!--", "<\\!--")
@@ -107,6 +131,7 @@ def build(md_path: pathlib.Path, out_path: pathlib.Path) -> tuple[pathlib.Path, 
     src = read(md_path)
     meta = parse_frontmatter(src)
     mermaid, mermaid_note = mermaid_runtime(src)
+    files, files_note = assets(src, md_path.resolve().parent)
 
     body = re.sub(r"^---\r?\n.*?\r?\n---\r?\n?", "", src, count=1, flags=re.S)
     first_h1 = re.search(r"^#\s+(.+)$", body, re.M)
@@ -135,8 +160,9 @@ def build(md_path: pathlib.Path, out_path: pathlib.Path) -> tuple[pathlib.Path, 
         ),
         "VENDOR_MARKED": inline_js(read_vendor("marked.min.js")),
         "VENDOR_MERMAID": inline_js(mermaid),
-        "SCREEN_STYLE": read(HERE / "screen.css"),
-        "SCREEN": inline_js(read(HERE / "screen.js")),
+        "ASSETS_JSON": json.dumps(files).replace("</", "<\\/"),
+        "ANNOTATED_STYLE": read(HERE / "annotated.css"),
+        "ANNOTATED": inline_js(read(HERE / "annotated.js")),
         "APP": inline_js(read(HERE / "app.js")),
     }
     # One pass. Substituting in sequence would let a `{{...}}` inside an already inserted
@@ -145,7 +171,7 @@ def build(md_path: pathlib.Path, out_path: pathlib.Path) -> tuple[pathlib.Path, 
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(out, encoding="utf-8")
-    return out_path, mermaid_note
+    return out_path, ", ".join(filter(None, [mermaid_note, files_note]))
 
 
 def main() -> int:
