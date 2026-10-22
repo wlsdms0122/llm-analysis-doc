@@ -41,8 +41,8 @@
     toast._t = setTimeout(function () { t.classList.remove('on'); }, 1800);
   }
 
-  function download(name, text, mime) {
-    var b = new Blob([text], { type: (mime || 'text/plain') + ';charset=utf-8' });
+  function download(name, content, mime) {
+    var b = content instanceof Blob ? content : new Blob([content], { type: (mime || 'text/plain') + ';charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(b);
     a.download = name;
@@ -347,6 +347,8 @@
           out.push(stash(renderCanvasStub(cap, text, gi2), indent));
         } else if (lang === 'trace' || lang === 'seq') {
           out.push(stash(renderSeq(text), indent));
+        } else if (lang === 'screen' || lang === 'cards') {
+          out.push(stash(renderScreenFigure(lang, text, cap), indent));
         } else {
           out.push(line);
           out.push.apply(out, body);
@@ -457,12 +459,12 @@
         '<span class="zlabel zoom-only">100%</span>' +
         '<button class="zoom-only" data-act="zin" title="Zoom in">' + ICON.zoomIn + '</button>' +
         '<button class="zoom-only" data-act="zfit" title="Fit">' + ICON.fit + '</button>' +
-        '<button data-act="src" title="Show the mermaid source">' + ICON.code + '</button>' +
-        '<button class="src-only" data-act="copysrc" title="Copy the mermaid source">' + ICON.copy + '</button>' +
+        '<button data-act="src" title="Show the source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the source">' + ICON.copy + '</button>' +
         '<button data-act="svg" title="Download the SVG">' + ICON.download + '</button>' +
         '<button data-act="zoom" title="Enlarge">' + ICON.expand + '</button>' +
       '</div>' +
-      '<div class="figure-body"><pre class="mermaid-src"><code>' + esc(src) + '</code></pre>' +
+      '<div class="figure-body"><pre class="figure-src"><code>' + esc(src) + '</code></pre>' +
       '<div class="mermaid-out" id="' + id + '"></div></div></div>';
   }
 
@@ -474,10 +476,32 @@
         '<span class="cap"' + (gi >= 0 ? ' data-gi="' + gi + '"' : '') + '>' + esc(title || '') + '</span>' +
         '<span class="sp"></span>' +
         '<button data-act="canvas" data-gi="' + gi + '" title="Show on the flow canvas">' + ICON.canvas + '</button>' +
-        '<button data-act="src" title="Show the mermaid source">' + ICON.code + '</button>' +
-        '<button class="src-only" data-act="copysrc" title="Copy the mermaid source">' + ICON.copy + '</button>' +
+        '<button data-act="src" title="Show the source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the source">' + ICON.copy + '</button>' +
       '</div>' +
-      '<div class="figure-body"><pre class="mermaid-src"><code>' + esc(src) + '</code></pre></div></div>';
+      '<div class="figure-body"><pre class="figure-src"><code>' + esc(src) + '</code></pre></div></div>';
+  }
+
+  // A screen or cards figure. Its drawing goes into a shadow root once the document is in
+  // the page (mountScreens), so here it is only the markup, kept by index.
+  var SCREENS = [];
+  function renderScreenFigure(kind, src, caption) {
+    SCREENS.push(ScreenFigure.draw(kind, src, { inline: mdInline, preset: META.uiTheme }));
+    return '<div class="figure screen">' +
+      '<div class="figure-bar">' +
+        '<span class="cap">' + esc(caption || '') + '</span><span class="sp"></span>' +
+        '<button class="zoom-only" data-act="zout" title="Zoom out">' + ICON.zoomOut + '</button>' +
+        '<span class="zlabel zoom-only">100%</span>' +
+        '<button class="zoom-only" data-act="zin" title="Zoom in">' + ICON.zoomIn + '</button>' +
+        '<button class="zoom-only" data-act="zfit" title="Fit">' + ICON.fit + '</button>' +
+        '<button data-act="src" title="Show the source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the source">' + ICON.copy + '</button>' +
+        '<button data-act="svg" title="Download the SVG">' + ICON.download + '</button>' +
+        '<button class="label" data-act="png" title="Download the PNG">PNG</button>' +
+        '<button data-act="zoom" title="Enlarge">' + ICON.expand + '</button>' +
+      '</div>' +
+      '<div class="figure-body"><pre class="figure-src"><code>' + esc(src) + '</code></pre>' +
+      '<div class="sf-out" data-sf="' + (SCREENS.length - 1) + '"></div></div></div>';
   }
 
   function renderSeq(src) {
@@ -720,6 +744,8 @@
     if (g && g.key) el.textContent = g.label;
   });
 
+  $$('#doc .sf-out').forEach(function (el) { ScreenFigure.mount(el, SCREENS[Number(el.dataset.sf)]); });
+
   $$('#doc table').forEach(function (t) {
     if (t.parentElement.classList.contains('table-scroll')) return;
     var w = document.createElement('div');
@@ -958,7 +984,7 @@
       }
     });
     $$('.figure[data-mermaid]').forEach(function (fig, idx) {
-      var src = $('.mermaid-src', fig).textContent;
+      var src = $('.figure-src', fig).textContent;
       var out = $('.mermaid-out', fig);
       mermaid.render('mermaid-svg-' + pass + '-' + idx, src).then(function (r) {
         if (pass !== mermaidPass) return;   // a late result from the previous theme is dropped
@@ -994,7 +1020,24 @@
 
   function figView(fig) { if (!fig._v) fig._v = { s: 1, x: 0, y: 0 }; return fig._v; }
 
+  // What an enlarged figure moves and scales: the mermaid output or the screen host.
+  function figDrawing(fig) { return $('.mermaid-out', fig) || $('.sf-out', fig); }
+  function figSize(fig) {
+    var svg = $('.mermaid-out svg', fig), sf = $('.sf-out', fig);
+    if (svg) return svgSize(svg);
+    return sf && sf.offsetWidth ? { w: sf.offsetWidth, h: sf.offsetHeight } : null;
+  }
+
+  // A screen host lays itself out by its width. Lifted out of the page it would shrink to
+  // the device alone and drop its notes below, so the width is held from before the lift,
+  // and held wide enough for the notes to stand beside the device.
   function figLockSize(fig, on) {
+    var sf = $('.sf-out', fig);
+    if (sf) {
+      if (!on) sf.style.width = '';
+      else if (!sf.style.width) sf.style.width = Math.max(sf.offsetWidth, 760) + 'px';
+      return;
+    }
     var svg = $('.mermaid-out svg', fig), out = $('.mermaid-out', fig);
     if (!svg) return;
     if (on) {
@@ -1012,7 +1055,7 @@
   }
 
   function figApply(fig) {
-    var st = figView(fig), out = $('.mermaid-out', fig);
+    var st = figView(fig), out = figDrawing(fig);
     if (!fig.classList.contains('zoom')) { out.style.transform = ''; return; }
     out.style.transform = 'translate(' + st.x + 'px,' + st.y + 'px) scale(' + st.s + ')';
     var lab = $('.zlabel', fig);
@@ -1020,10 +1063,11 @@
   }
 
   function figFit(fig) {
-    var st = figView(fig), body = $('.figure-body', fig), svg = $('.mermaid-out svg', fig);
-    if (!svg) return;
+    var st = figView(fig), body = $('.figure-body', fig);
     figLockSize(fig, true);
-    var r = body.getBoundingClientRect(), s = svgSize(svg);
+    var s = figSize(fig);
+    if (!s) return;
+    var r = body.getBoundingClientRect();
     var W = r.width || 800, H = r.height || 500;
     st.s = Math.min((W - 56) / s.w, (H - 56) / s.h, 3);
     if (!isFinite(st.s) || st.s <= 0) st.s = 1;
@@ -1069,11 +1113,24 @@
     download((META.slug || 'diagram') + '-' + name + '.svg', out, 'image/svg+xml');
   }
 
+  function exportScreen(fig, format) {
+    var host = $('.sf-out', fig), cap = $('.cap', fig);
+    var name = (META.slug || 'screen') + '-' + slug((cap && cap.textContent.trim()) || 'screen');
+    if (format === 'svg') {
+      var s = ScreenFigure.toSvg(host);
+      if (!s) return toast('not drawn yet');
+      return download(name + '.svg', '<?xml version="1.0" encoding="UTF-8"?>\n' + s.svg, 'image/svg+xml');
+    }
+    ScreenFigure.toPng(host).then(function (b) { download(name + '.png', b); },
+      function () { toast('this browser will not draw the PNG, use the SVG'); });
+  }
+
   docEl.addEventListener('click', function (e) {
     var btn = e.target.closest('.figure-bar button');
     if (btn) {
       var fig = btn.closest('.figure'), act = btn.dataset.act;
       if (act === 'zoom') {
+        if (!fig.classList.contains('zoom')) figLockSize(fig, true);
         var on = fig.classList.toggle('zoom');
         btn.innerHTML = on ? ICON.close : ICON.expand;
         btn.title = on ? 'Close' : 'Enlarge';
@@ -1085,14 +1142,15 @@
       else if (act === 'src') {
         var showing = fig.classList.toggle('showsrc');
         btn.classList.toggle('on', showing);
-        btn.title = showing ? 'Show the diagram' : 'Show the mermaid source';
+        btn.title = showing ? 'Show the figure' : 'Show the source';
       }
       else if (act === 'copysrc') {
-        copyText($('.mermaid-src', fig).textContent).then(
-          function () { toast('mermaid source copied'); },
+        copyText($('.figure-src', fig).textContent).then(
+          function () { toast('source copied'); },
           function () { toast('copy failed'); });
       }
-      else if (act === 'svg') exportFigureSVG(fig);
+      else if (act === 'svg') { if ($('.sf-out', fig)) exportScreen(fig, 'svg'); else exportFigureSVG(fig); }
+      else if (act === 'png') exportScreen(fig, 'png');
       else if (act === 'canvas') { setView('canvas'); canvas.open(Number(btn.dataset.gi)); }
       return;
     }

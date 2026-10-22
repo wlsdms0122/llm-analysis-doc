@@ -14,6 +14,7 @@ Optional frontmatter on the input:
     kicker: TossBank iOS
     subtitle: 2026-08-28 draft
     slug: native-sign-flow
+    ui-theme: toss
     ---
 """
 
@@ -126,12 +127,14 @@ def build(md_path: pathlib.Path, out_path: pathlib.Path) -> tuple[pathlib.Path, 
         "CONTENT_B64": base64.b64encode(src.encode("utf-8")).decode("ascii"),
         "META_JSON": inline_js(
             json.dumps(
-                {"title": title, "slug": slug, "kicker": kicker, "subtitle": subtitle},
+                {"title": title, "slug": slug, "kicker": kicker, "subtitle": subtitle, "uiTheme": meta.get("ui-theme", "")},
                 ensure_ascii=False,
             )
         ),
         "VENDOR_MARKED": inline_js(read_vendor("marked.min.js")),
         "VENDOR_MERMAID": inline_js(mermaid),
+        "SCREEN_STYLE": read(HERE / "screen.css"),
+        "SCREEN": inline_js(read(HERE / "screen.js")),
         "APP": inline_js(read(HERE / "app.js")),
     }
     # One pass. Substituting in sequence would let a `{{...}}` inside an already inserted
