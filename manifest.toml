@@ -13,3 +13,6 @@ requires = ["python3", "bash", "curl"]
 setup = "bash source/fetch-vendor.sh"
 build = "python3 source/build.py"
 verify = "bash source/verify.sh"
+shot = "python3 source/shot.py"
+catalog = "python3 source/catalog.py"
+watch = "python3 source/watch.py"
