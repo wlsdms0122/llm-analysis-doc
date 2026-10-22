@@ -4,7 +4,7 @@ Use this to hand over analysis and design work. **Write one markdown file and ba
 
 The output is a single HTML file with no external requests. It carries a table of contents on the left, three views (document, source, canvas), mermaid diagrams, a flow canvas you can rearrange, and a way to get the markdown back out. It opens the same way on a corporate network, offline, or uploaded to Slack.
 
-Only the mermaid a document draws goes into it. A document of flowcharts comes to about 900KB, one with no diagram to about 180KB.
+Only the mermaid a document draws goes into it. A document of flowcharts comes to about 1.1MB, one with no diagram to about 270KB.
 
 This directory is an open-package. The specification is `open-package spec`.
 
@@ -18,7 +18,7 @@ open-package verify                       # does it work here
 
 Leave `-o` out and the output lands next to the input under the same name (`flow.md` becomes `flow.html`).
 
-`setup` fetches marked 12.0.2 and mermaid 10.9.1 into `source/vendor/`. That is someone else's code and it comes to 23MB unpacked, so the package does not carry it. The versions and their sha256 are pinned, so the same bytes arrive wherever you fetch from. Those bytes end up inside every document baked afterwards, so different ones would change the output without saying so. What is fetched is not committed.
+`setup` fetches marked 12.0.2 and mermaid 11.17.2 into `source/vendor/`. That is someone else's code and it comes to 23MB unpacked, so the package does not carry it. The versions and their sha256 are pinned, so the same bytes arrive wherever you fetch from. Those bytes end up inside every document baked afterwards, so different ones would change the output without saying so. What is fetched is not committed.
 
 If a corporate network blocks the registry, do not work around it. Give it a mirror.
 
@@ -33,13 +33,15 @@ Skip `setup` and `build` gives you the setup command instead of a stack trace.
 
 `document/SYNTAX.md` is the SSoT for the full syntax and the canvas controls. `document/EXAMPLE.md` is a working example of every component, and new documents start by copying it. This is only a list of what exists.
 
-- frontmatter: `title`, `kicker`, `subtitle`, `slug`. All optional. Without them the first `#` heading is used
+- frontmatter: `title`, `kicker`, `subtitle`, `slug`, `ui-theme`. All optional. Without them the first `#` heading is used
 - callouts: `:::note` `:::ok` `:::warn` `:::danger`. Text after the name is the title
 - steps: `:::steps`
 - two columns: `:::compare left | right`
 - diagrams: ```mermaid. Rendered in the body, and put on the flow canvas when the first effective line is `graph` or `flowchart`
 - canvas only graphs: ```canvas. Only a toolbar in the body, the drawing lives on the canvas
 - call sequences: ```trace. Line prefixes are `-` call, `?` branch, `!` error, `+` success
+- app screens: ```screen. Regions from top to bottom, drawn from app UI primitives in a device frame, numbered, with a note card each
+- components: ```cards. Elements of one kind side by side, each with its fields
 
 Give a diagram its name directly after the fence, as in ```mermaid signing entry flow. That name is the caption, the name in the canvas list, and the address its layout is stored under. Without a name, or with a name already taken, the canvas opens read only. There is no fallback: a name derived from the heading would break the address the moment a section is renamed.
 
@@ -73,6 +75,8 @@ The canvas follows the same rule. It is a window onto the document's diagrams ra
 | `source/template.html` | The page skeleton. Placeholders and nothing else |
 | `source/app.js` | The runtime. Markdown preprocessing, component rendering, theme, flow canvas |
 | `source/style.css` | Design tokens and layout, light and dark |
+| `source/screen.js` | Screen and cards figures. Reading the block, the app UI primitives, layout, SVG and PNG export |
+| `source/screen.css` | The style inside a screen figure, and the `ui-theme` presets |
 | `source/vendor/` | Fetched, not carried. See `setup` |
 
 ## Changing it

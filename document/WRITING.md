@@ -68,11 +68,17 @@ The components exist because some shapes of content cost the reader real effort 
 | two things being compared, point for point | `:::compare` | as prose the reader has to build the table in their head |
 | an ordered procedure someone will follow | `:::steps` | the ordering becomes the structure rather than a claim about it |
 | a call sequence across components | ` ```trace ` | who calls whom is the content, and prose buries it in verbs |
+| what a screen shows and where each piece of it comes from | ` ```screen ` | the reader sees the screen they know, and each region points at the information behind it |
+| several elements of one kind and the fields each one draws | ` ```cards ` | the same frame N times makes the differences the only thing that moves |
 | a warning that changes what the reader should do | `:::warn` or `:::danger` | it survives skimming, which an inline sentence does not |
 | a fixed set of attributes across cases | a plain table | |
 | anything else | prose | |
 
 Two traps. A diagram that only restates the sentence above it costs the reader twice, so cut the sentence or cut the diagram. And a callout used for emphasis rather than for a warning trains the reader to skip callouts, which is expensive the first time one matters.
+
+**A screen figure is about the information, not the layout.** The screen is what the reader recognises, and the notes are the analysis: what each region needs from the system, and which field carries it. Name a region after what it shows, and write its notes as the information and its coordinate (`order.alerts`), not as a description of the pixels. A region the system gives nothing to, a divider for instance, says so.
+
+**Draw it as the design draws it.** Use the copy on the design capture word for word, and real looking values in the rest. A value you made up is marked as made up in the text, because a screen that looks real is read as real. Mark what the app does not have yet with `[planned]` rather than leaving it out or drawing it as if it shipped. Bake the document and look at the figure next to the design capture, in light and dark, before handing it over.
 
 Name the diagrams you expect to be discussed. The name is the address on the canvas, and an unnamed one opens read only (`SYNTAX.md`).
 

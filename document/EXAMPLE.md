@@ -3,6 +3,7 @@ title: analysis-doc components
 kicker: analysis-doc
 subtitle: what the shell can render, in the flesh
 slug: analysis-doc-example
+ui-theme: toss
 ---
 
 # analysis-doc components
@@ -106,6 +107,68 @@ title: the signing entry path
 - server | `POST /api/certificate/toss/prepare/register` | level=LEVEL2
 ! server | 400 `NEED_IDENTIFICATION_RESULT` | errorData.moveScheme
 + app | opens the scheme | URLSchemeRouter
+```
+
+## Screen
+
+A region marked `[planned]` is one the app does not have yet. Point at a region, a badge or a card and the other two light up.
+
+```screen order detail
+frame: phone
+- navigation
+  ui: nav(back, "주문 상세", share, more)
+  note: whether the order can be shared · `order.shareable`
+- top notice [planned]
+  ui: notice("배송 지연", "10월 23일에 도착해요.", action: "자세히")
+  note: the state on this order the user has to check · `order.alerts`
+- amount paid
+  ui: card
+    text("주문번호 2026-1022-0001", s, sub) | icon(copy, s, faint)
+    text("48,000원", xl, bold)
+    text("포인트 2,000원 사용", s, sub)
+  note: amount paid · `payment.amount`
+  note: points used · `payment.pointUsed`
+- section break
+  ui: divider(thick)
+  note: layout only, no information
+- items
+  ui:
+    text("주문 상품 2개", m, bold)
+    item(gift, "무선 이어폰 케이스", "블랙 · 1개", "32,000원")
+    item(card, "보조 배터리", "화이트 · 1개", "16,000원", chevron)
+  note: the ordered items · `order.items[]`
+- actions
+  ui: button("배송 조회", gray) | button("문의하기")
+  note: whether the delivery can be tracked · `order.trackable`
+```
+
+## Components
+
+```cards what a notice can be
+- one line notice
+  note: a short notice over the screen
+  ui: notice("10월 23일에 도착해요.", action: "자세히")
+  field: text | String | the notice
+  field: link | URL? | where a tap goes
+- failure notice [planned]
+  note: something the user has to act on
+  ui: notice("결제 실패", "카드 한도를 확인해주세요.", danger)
+  field: kicker | String | the state
+  field: text | String | what to do
+- cancel sheet
+  note: asks before cancelling the order
+  ui: sheet
+    text("주문을 취소할까요?", l, bold)
+    text("결제한 48,000원은 3일 안에 돌려드려요.", sub)
+    button("닫기", gray) | button("취소하기", danger)
+  field: refundAmount | Int | the amount returned
+- account row
+  note: a list row with a brand mark and a toggle
+  ui:
+    tabs("전체", "입금", "출금", on: "입금")
+    chip("1개월", on) | chip("3개월") | chip("6개월")
+    item(토, "토스뱅크 통장", "1000-1234-5678", toggle, on)
+  field: alias | String? | the name the user gave the account
 ```
 
 ## Tables

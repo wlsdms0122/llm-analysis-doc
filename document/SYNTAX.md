@@ -12,7 +12,7 @@ Leave `-o` out and it bakes next to the input with the extension swapped (`flow.
 
 The output is a single file with no external requests. marked and mermaid are carried inside it. It opens the same way on a corporate network, offline, or uploaded to Slack.
 
-Only the mermaid a document draws goes in. Flowcharts alone come to about 1.1MB, and a document with no diagram to about 215KB, against 3.6MB for the whole of mermaid. The build prints what it put in.
+Only the mermaid a document draws goes in. Flowcharts alone come to about 1.1MB, and a document with no diagram to about 270KB, against 3.6MB for the whole of mermaid. The build prints what it put in.
 
 ## Design
 
@@ -44,6 +44,7 @@ title: Native signing flow
 kicker: TossBank iOS
 subtitle: 2026-08-28 draft
 slug: native-sign-flow        # canvas storage key and export filename
+ui-theme: toss                # the preset app screens are drawn in (```screen, ```cards)
 ---
 ```
 
@@ -148,6 +149,103 @@ title: signing entry
 + app | opens the scheme |
 ```
 ````
+
+### Screens: ```screen
+
+An app screen, drawn as it looks in the design, with its regions numbered and a note card beside it for each. Write the screen as a list of regions from top to bottom. The shell draws the device frame, the regions, the number badges, the dotted leaders and the note cards, and pointing at a region, a badge or a note lights up all three.
+
+````
+```screen order detail
+frame: phone
+- navigation
+  ui: nav(back, "주문 상세", share, more)
+  note: whether the order can be shared · `order.shareable`
+- top notice [planned]
+  ui: notice("배송 지연", "10월 23일에 도착해요.", action: "자세히")
+  note: the state on this order the user has to check · `order.alerts`
+- amount paid
+  ui: card
+    text("주문번호 2026-1022-0001", s, sub) | icon(copy, s, faint)
+    text("48,000원", xl, bold)
+    text("포인트 2,000원 사용", s, sub)
+  note: amount paid · `payment.amount`
+```
+````
+
+The name after the fence is the caption, as with mermaid.
+
+| line | what it is |
+|---|---|
+| `frame: phone` | Before the first region. `phone` (the default) draws the bezel, status bar and home indicator, `none` draws the screen alone |
+| `- name` | A region. The name goes on its note card |
+| `- name [planned]` | A region the app does not have yet. It is hatched on the screen and tagged on its card |
+| `ui: …` | What the region shows. One row on the same line, or several rows indented under it |
+| `note: …` | A line on the region's card. Inline markdown works, so a field goes in a code span. Repeat it for more lines |
+| `html:` | The region written in HTML, indented under it. For what the primitives cannot draw |
+
+**A row** is one or more elements separated by `|`, laid out left to right. An element is `kind(arguments)`. An argument is a quoted text, a `key: value`, or a bare word that switches an option on. Texts fill the element's slots in order.
+
+| element | slots and options |
+|---|---|
+| `nav(back, "title", share, more)` | `back` or `close` goes on the left, the text is the title, other icon names go on the right. `action: "편집"` adds a text button on the right |
+| `text("…", size, weight, tone, align)` | size `xxl` `xl` `l` `m` `s` `xs` (default is body), weight `bold` `semibold` `regular`, tone `sub` `faint` `accent` `danger` `positive`, align `center` `right` |
+| `button("…", style, small, disabled)` | style `primary` (default) `secondary` `gray` `text` `danger`. Buttons in one row share its width. `small` hugs its label |
+| `chip("…", on)` | A row of chips wraps. `on` marks the selected one |
+| `badge("…", style)` | A small label. Style `accent` (default) `danger` `gray` `solid` |
+| `item(icon, "title", "sub", "right", "right sub", trail)` | A list row. The first bare word is the leading mark: an icon name draws the icon, any other word draws its first letter (a bank or brand). `right:` and `sub:` fill a slot by name. Trail `chevron`, `toggle`, `check`, with `on` for a toggle or check that is set |
+| `notice("kicker", "text", action: "…", tone)` | A banner. With one text it is the text alone. Tone `danger` or `gray`, and an icon name replaces the leading icon |
+| `tabs("a", "b", "c", on: "b")` | Tabs under a line. `fill` spreads them evenly. Without `on` the first is selected |
+| `input("placeholder", label: "…", value: "…")` | A text field. A value replaces the placeholder |
+| `icon(name, …, tone, s)` | One or more icons. Tone `sub` `faint` `accent` `danger` `positive` `fg`, `s` for small |
+| `image("label", ratio: "16:9")` | A placeholder for a picture. `height: 180` instead of a ratio, `bleed` for edge to edge |
+| `divider` / `divider(thick)` | A hairline, or the thick band that separates sections |
+| `space` / `space(16)` | In a row, pushes what follows to the far end. On its own row, a fixed gap |
+| `tabbar(home: "홈", gift: "혜택", on: "홈")` | The bottom tab bar. Each key is an icon name and its value the label. It always sits at the bottom of the screen |
+
+Icon names: `back` `close` `chevron` `down` `share` `more` `settings` `search` `copy` `check` `plus` `bell` `home` `gift` `card` `menu` `info` `alert` `help` `heart` `star` `user` `lock` `calendar` `clock` `send` `refresh` `edit` `trash` `image` `filter` `bank` `wallet` `chat` `pin` `eye` `phone` `qr` `external` `download`.
+
+**Containers** hold rows indented under them. `card` is a rounded surface, `section` is a full width band in the section colour, and `sheet` is a bottom sheet. A region whose `ui` is a sheet is laid over the bottom of the screen, and the screen behind it dims.
+
+```
+- confirm
+  ui: sheet
+    text("주문을 취소할까요?", l, bold)
+    button("닫기", gray) | button("취소하기", danger)
+```
+
+**The app screen keeps its own look.** Its colours, type, radii and spacing come from a preset rather than from the document theme, so a dark document still shows the screen as it is designed. Only what is outside the screen (badges, leaders, cards) follows the theme. The preset is picked once for the document with `ui-theme` in the frontmatter: `default`, `ios`, `material` or `toss`. A document never sets colours or spacing itself.
+
+**HTML regions** take any markup. The figure is drawn inside its own shadow root, so the shell's styles do not reach in, and a `<style>` inside the region is rewritten to start at that region, so it does not reach the primitives or other regions. Class names starting with `sf-` belong to the primitives. Scripts are dropped.
+
+```
+- chart
+  html:
+    <style>.bar { height: 8px; background: #3182f6; border-radius: 4px }</style>
+    <div class="bar" style="width: 70%"></div>
+```
+
+What the shell cannot read (an unknown element, an option an element does not take, a line outside any region, a preset it does not have) is listed in red above the figure, and an unknown element is drawn as a dashed box holding its source.
+
+The toolbar is the figure toolbar: show source, copy, download SVG, download PNG, enlarge. The SVG holds the drawn figure as HTML inside a `foreignObject`, with the theme it was drawn in. The PNG is that SVG at twice its size. Where the figure has no room for the cards beside the device, they go under it.
+
+### Components: ```cards
+
+Several elements of the same kind side by side, each with its name, a line about it, the element itself, and its fields. Use it to show which field of a response lands where. `:::compare` sets two things against each other, this puts N things in the same frame.
+
+````
+```cards notices
+- one line notice
+  note: a short notice over the screen
+  ui: notice("10월 23일에 도착해요.", action: "자세히")
+  field: text | String | the notice
+  field: link | URL? | where a tap goes
+- failure notice [planned]
+  ui: notice("결제 실패", "카드 한도를 확인해주세요.", danger)
+  field: kicker | String | the state
+```
+````
+
+Each entry takes the lines of a screen region (`ui`, `note`, `html`, `[planned]`) and adds `field: name | type | meaning`, one per field, drawn as a table under the element. The meaning takes inline markdown. A `sheet` is drawn over a dimmed backdrop.
 
 ## Flow canvas
 
@@ -280,6 +378,8 @@ analysis-doc/
   source/template.html      the shell skeleton, placeholders and no content
   source/style.css          the fixed style, light and dark
   source/app.js             the fixed runtime, markdown rendering, contents, components, canvas
+  source/screen.js          screen and cards figures: reading the block, the app UI primitives, layout, export
+  source/screen.css         the style inside a screen figure, with the ui-theme presets
   source/vendor/            marked and mermaid. Not in the repository. `open-package setup` fetches them
 ```
 
