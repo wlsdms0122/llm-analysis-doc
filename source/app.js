@@ -548,7 +548,7 @@
     'trapezoid-top': 'trapezoid', 'inv-trapezoid': 'trapezoid'
   });
 
-  var META = /^@\{(.*)\}$/;
+  var NODE_META = /^@\{(.*)\}$/;
   var META_ENTRY = /([\w-]+)\s*:\s*(?:"([^"]*)"|'([^']*)'|([^,}]*))/g;
 
   // The keys mermaid takes in `@{ ... }` beyond these two name things the canvas has no way
@@ -571,7 +571,7 @@
     var m = tok.match(/^([\w.$-]+)\s*(.*)$/);
     if (!m) return null;
     var id = m[1], rest = m[2].trim(), shape = null, label = null;
-    var meta = rest.match(META);
+    var meta = rest.match(NODE_META);
     if (meta) {
       var read = parseMeta(meta[1]);
       shape = read.shape;
