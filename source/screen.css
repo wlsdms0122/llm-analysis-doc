@@ -210,7 +210,7 @@
 .sf-home::after { content: ""; position: absolute; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: var(--ui-fg); }
 .sf-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, .42); z-index: 1; }
 .sf-region.sheet-region { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; }
-.sf-region.bottom { margin-top: auto; }
+.sf-region.bottom { margin-top: auto; order: 1; }
 .sf-bare .sf-screen.has-sheet { min-height: 640px; }
 .sf-home { z-index: 3; }
 

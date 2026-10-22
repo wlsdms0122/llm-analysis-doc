@@ -74,12 +74,12 @@ window.ScreenFigure = (function () {
   // ---------------------------------------------------------------- reading the block
   // Indentation makes the tree: an entry (`- name`), its keys (`ui:`, `note:`, ...), and
   // the rows under a container. Only depth relative to the parent matters.
-  function outline(src) {
+  function outline(lines) {
     var root = { depth: -1, children: [] }, stack = [root];
-    String(src).split('\n').forEach(function (raw) {
+    lines.forEach(function (raw, at) {
       if (!raw.trim()) return;
       var depth = raw.match(/^[ \t]*/)[0].replace(/\t/g, '    ').length;
-      var node = { text: raw.trim(), raw: raw, depth: depth, children: [] };
+      var node = { text: raw.trim(), at: at, depth: depth, children: [] };
       while (stack[stack.length - 1].depth >= depth) stack.pop();
       stack[stack.length - 1].children.push(node);
       stack.push(node);
@@ -87,13 +87,14 @@ window.ScreenFigure = (function () {
     return root.children;
   }
 
-  // The lines under a node with the indentation they have relative to the first of them.
-  function rawLines(nodes) {
-    var out = [];
-    (function walk(list) {
-      list.forEach(function (n) { out.push(n.raw); walk(n.children); });
-    })(nodes);
-    var base = out.length ? out[0].match(/^[ \t]*/)[0].length : 0;
+  // The source lines a run of nodes spans, blank ones included, with the indentation they
+  // have relative to the first of them.
+  function rawLines(nodes, lines) {
+    if (!nodes.length) return '';
+    var last = nodes[nodes.length - 1];
+    while (last.children.length) last = last.children[last.children.length - 1];
+    var out = lines.slice(nodes[0].at, last.at + 1);
+    var base = out[0].match(/^[ \t]*/)[0].length;
     return out.map(function (l) { return l.slice(Math.min(base, l.match(/^[ \t]*/)[0].length)); }).join('\n');
   }
 
@@ -142,28 +143,48 @@ window.ScreenFigure = (function () {
   var ENTRY_RE = /^-\s+(.*?)(?:\s+\[(planned)\])?\s*$/i;
   var LINE_KEY_RE = /^([a-z]+)\s*:\s*(.*)$/i;
 
-  function parse(src, warn) {
-    var opts = {}, entries = [];
-    outline(src).forEach(function (n) {
+  // Lines before the first entry that set something for the whole figure.
+  var FIGURE_KEYS = { screen: { frame: 1 }, cards: {} };
+  // Lines an entry takes, by figure.
+  var ENTRY_KEYS = { screen: { ui: 1, note: 1, html: 1 }, cards: { ui: 1, note: 1, html: 1, field: 1 } };
+
+  function parse(kind, src, warn) {
+    var lines = String(src).split('\n'), opts = {}, entries = [];
+    outline(lines).forEach(function (n) {
       var em = n.text.match(ENTRY_RE);
-      if (em) { entries.push(parseEntry(em[1], !!em[2], n.children, warn)); return; }
+      if (em) { entries.push(parseEntry(kind, em[1], !!em[2], n.children, lines, warn)); return; }
       var km = n.text.match(LINE_KEY_RE);
-      if (km) { opts[km[1].toLowerCase()] = trim(km[2]); return; }
+      if (km && FIGURE_KEYS[kind][km[1].toLowerCase()] && !entries.length) { opts[km[1].toLowerCase()] = trim(km[2]); return; }
       warn('not read: ' + n.text);
     });
     return { opts: opts, entries: entries };
   }
 
-  function parseEntry(name, planned, children, warn) {
+  // name | type | meaning. Only the first two `|` separate, and none inside quotes or a code
+  // span, so a meaning keeps its pipes and a type like `"A" | "B"` can be written in backticks.
+  function splitField(value) {
+    var parts = [], cur = '', quoted = '', i;
+    for (i = 0; i < value.length; i++) {
+      var ch = value[i];
+      if (quoted) { if (ch === quoted) quoted = ''; }
+      else if (ch === '"' || ch === '`') quoted = ch;
+      else if (ch === '|' && parts.length < 2) { parts.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    parts.push(cur);
+    return parts.map(trim);
+  }
+
+  function parseEntry(kind, name, planned, children, lines, warn) {
     var e = { name: name, planned: planned, ui: [], notes: [], fields: [], html: null };
     children.forEach(function (c) {
       var km = c.text.match(LINE_KEY_RE);
       var key = km ? km[1].toLowerCase() : '', value = km ? trim(km[2]) : '';
-      if (key === 'ui') e.ui = e.ui.concat(value ? [{ text: value, children: c.children }] : c.children);
+      if (!ENTRY_KEYS[kind][key]) warn(name + ': not read: ' + c.text);
+      else if (key === 'ui') e.ui = e.ui.concat(value ? [{ text: value, children: c.children }] : c.children);
       else if (key === 'note') e.notes.push(value);
-      else if (key === 'field') e.fields.push(value.split('|').map(trim));
-      else if (key === 'html') e.html = (value ? value + '\n' : '') + rawLines(c.children);
-      else warn(name + ': not read: ' + c.text);
+      else if (key === 'field') e.fields.push(splitField(value));
+      else e.html = (value ? value + '\n' : '') + rawLines(c.children, lines);
     });
     return e;
   }
@@ -185,6 +206,18 @@ window.ScreenFigure = (function () {
     }).map(function (f) { return ' ' + f.toLowerCase(); }).join('');
   }
   function has(call, flag) { return call.flags.some(function (f) { return f.toLowerCase() === flag; }); }
+  // Warns about every flag outside `allowed` (a set, or a test).
+  function only(call, allowed, ctx) {
+    call.flags.forEach(function (f) {
+      var k = f.toLowerCase();
+      if (!(typeof allowed === 'function' ? allowed(k) : allowed[k])) ctx.warn(call.kind + ': unknown option "' + f + '"');
+    });
+  }
+  function iconOrWarn(name, ctx, who) {
+    var svg = icon(name);
+    if (!svg) ctx.warn(who + ': unknown icon "' + name + '"');
+    return svg;
+  }
 
   // A leading mark: an icon when the word names one, otherwise its first letter, which is
   // how a bank or brand logo reads at this size.
@@ -193,12 +226,12 @@ window.ScreenFigure = (function () {
   }
 
   var KINDS = {
-    nav: function (c) {
+    nav: function (c, ctx) {
       var left = '', right = '';
       c.flags.forEach(function (f) {
         var k = f.toLowerCase();
         if (!left && (k === 'back' || k === 'close')) left = '<span class="tap">' + icon(k) + '</span>';
-        else right += '<span class="tap">' + (icon(k) || esc(f)) + '</span>';
+        else right += '<span class="tap">' + iconOrWarn(k, ctx, 'nav') + '</span>';
       });
       if (c.keys.action) right += '<span class="tap action">' + esc(c.keys.action) + '</span>';
       var title = c.texts[0] || c.keys.title || '';
@@ -212,17 +245,20 @@ window.ScreenFigure = (function () {
     button: function (c, ctx) {
       return '<div class="sf-btn' + flagClasses(c, BUTTON_FLAGS, ctx) + '">' + esc(c.texts[0] || '') + '</div>';
     },
-    chip: function (c) {
+    chip: function (c, ctx) {
+      only(c, { on: 1 }, ctx);
       return '<span class="sf-chip' + (has(c, 'on') ? ' on' : '') + '">' + esc(c.texts[0] || '') + '</span>';
     },
     badge: function (c, ctx) {
       return '<span class="sf-badge-ui' + flagClasses(c, BADGE_FLAGS, ctx) + '">' + esc(c.texts[0] || '') + '</span>';
     },
-    item: function (c) {
+    item: function (c, ctx) {
       var t = c.texts, k = c.keys;
+      var leads = c.flags.filter(function (f) { return !TRAILS[f.toLowerCase()]; });
+      leads.slice(1).forEach(function (f) { ctx.warn('item: unknown option "' + f + '"'); });
       var title = k.title || t[0] || '', sub = k.sub || t[1] || '';
       var right = k.right || t[2] || '', rightSub = k['right-sub'] || t[3] || '';
-      var leadWord = c.flags.filter(function (f) { return !TRAILS[f.toLowerCase()]; })[0];
+      var leadWord = leads[0];
       var on = has(c, 'on'), trail = '';
       if (has(c, 'chevron')) trail = '<span class="trail">' + icon('chevron') + '</span>';
       else if (has(c, 'toggle')) trail = '<span class="sf-toggle' + (on ? ' on' : '') + '"></span>';
@@ -234,7 +270,8 @@ window.ScreenFigure = (function () {
           (rightSub ? '<div class="sub">' + esc(rightSub) + '</div>' : '') + '</div>' : '') +
         trail + '</div>';
     },
-    notice: function (c) {
+    notice: function (c, ctx) {
+      only(c, function (k) { return k === 'danger' || k === 'gray' || isIcon(k); }, ctx);
       var kicker = c.keys.kicker || (c.texts.length > 1 ? c.texts[0] : '');
       var text = c.keys.text || c.texts[c.texts.length > 1 ? 1 : 0] || '';
       var tone = has(c, 'danger') ? ' danger' : has(c, 'gray') ? ' gray' : '';
@@ -244,7 +281,8 @@ window.ScreenFigure = (function () {
         '<div class="text">' + esc(text) + '</div></div>' +
         (c.keys.action ? '<span class="action">' + esc(c.keys.action) + icon('chevron') + '</span>' : '') + '</div>';
     },
-    tabs: function (c) {
+    tabs: function (c, ctx) {
+      only(c, { fill: 1 }, ctx);
       var on = c.keys.on || c.texts[0];
       return '<div class="sf-tabs' + (has(c, 'fill') ? ' fill' : '') + '">' + c.texts.map(function (t) {
         return '<span' + (t === on ? ' class="on"' : '') + '>' + esc(t) + '</span>';
@@ -255,7 +293,7 @@ window.ScreenFigure = (function () {
       return '<div class="sf-input">' + (c.keys.label ? '<div class="label">' + esc(c.keys.label) + '</div>' : '') +
         '<div class="field' + (value ? '' : ' empty') + '">' + esc(value || hint) + '</div></div>';
     },
-    icon: function (c) {
+    icon: function (c, ctx) {
       var tone = '', size = '';
       var marks = c.flags.filter(function (f) {
         var k = f.toLowerCase();
@@ -264,28 +302,30 @@ window.ScreenFigure = (function () {
         return true;
       });
       return marks.map(function (f) {
-        return '<span class="sf-glyph' + size + '"' + (tone ? ' style="color:' + tone + '"' : '') + '>' + (icon(f) || esc(f)) + '</span>';
+        return '<span class="sf-glyph' + size + '"' + (tone ? ' style="color:' + tone + '"' : '') + '>' + iconOrWarn(f, ctx, 'icon') + '</span>';
       }).join('');
     },
-    image: function (c) {
+    image: function (c, ctx) {
+      only(c, { bleed: 1 }, ctx);
       var ratio = (c.keys.ratio || '16:9').split(':').map(Number);
       var h = c.keys.height ? Number(c.keys.height) : 0;
       var shape = h ? 'height:' + h + 'px' : 'aspect-ratio:' + (ratio[0] || 16) + '/' + (ratio[1] || 9);
       return '<div class="sf-image' + (has(c, 'bleed') ? ' bleed' : '') + '" style="' + shape + '">' + icon('image') +
         (c.texts[0] ? '<span>' + esc(c.texts[0]) + '</span>' : '') + '</div>';
     },
-    divider: function (c) {
+    divider: function (c, ctx) {
+      only(c, { thick: 1 }, ctx);
       return '<div class="sf-divider' + (has(c, 'thick') ? ' thick' : '') + '"></div>';
     },
     space: function (c) {
       var n = Number(c.flags[0]);
       return n ? '<div class="sf-space" style="height:' + n + 'px;flex:none"></div>' : '<div class="sf-space grow"></div>';
     },
-    tabbar: function (c) {
+    tabbar: function (c, ctx) {
       var on = c.keys.on;
       return '<div class="sf-tabbar">' + Object.keys(c.keys).filter(function (k) { return k !== 'on'; }).map(function (k) {
         var label = c.keys[k];
-        return '<span' + (label === on ? ' class="on"' : '') + '>' + (icon(k) || icon('home')) + esc(label) + '</span>';
+        return '<span' + (label === on ? ' class="on"' : '') + '>' + iconOrWarn(k, ctx, 'tabbar') + esc(label) + '</span>';
       }).join('') + '</div>';
     }
   };
@@ -333,10 +373,14 @@ window.ScreenFigure = (function () {
     function walk(list) {
       return Array.prototype.map.call(list, function (rule) {
         if (rule.selectorText != null && rule.style) {
-          rule.selectorText = splitTop(rule.selectorText, ',').map(function (sel) {
-            return /^(:host|:root|html|body)\b/.test(sel) ? sel.replace(/^(:host|:root|html|body)/, scope) : scope + ' ' + sel;
-          }).join(', ');
-          return rule.cssText;
+          var want = splitTop(rule.selectorText, ',').map(function (sel) {
+            return /^(:root|html|body)(?![\w(-])/.test(sel) ? sel.replace(/^(:root|html|body)/, scope) : scope + ' ' + sel;
+          });
+          rule.selectorText = want.join(', ');
+          // The browser keeps the old selector when the new one does not parse, and the old
+          // one is unscoped, so a rule that did not take is dropped.
+          var took = splitTop(rule.selectorText, ',').every(function (sel) { return sel.indexOf(scope) === 0; });
+          return took ? rule.cssText : '';
         }
         if (rule.cssRules && !(window.CSSKeyframesRule && rule instanceof CSSKeyframesRule)) {
           return rule.cssText.slice(0, rule.cssText.indexOf('{')) + '{' + walk(rule.cssRules) + '}';
@@ -352,7 +396,7 @@ window.ScreenFigure = (function () {
     t.innerHTML = source;
     var css = '';
     Array.prototype.slice.call(t.content.querySelectorAll('style, script')).forEach(function (el) {
-      if (el.tagName === 'STYLE') css += el.textContent + '\n';
+      if (el.localName === 'style') css += el.textContent + '\n';
       el.remove();
     });
     var id = ctx.raw++;
@@ -410,7 +454,7 @@ window.ScreenFigure = (function () {
         (body ? '<div class="sf-preview' + (sheet ? ' sheet' : '') + (e.planned ? ' planned' : '') + '"><div class="sf-rows">' + body + '</div></div>' : '') +
         (e.fields.length ? '<table class="sf-fields"><thead><tr><th>Field</th><th>Type</th><th>Meaning</th></tr></thead><tbody>' +
           e.fields.map(function (f) {
-            return '<tr><td>' + esc(f[0] || '') + '</td><td class="type">' + esc(f[1] || '') + '</td><td>' + ctx.inline(f.slice(2).join(' | ')) + '</td></tr>';
+            return '<tr><td>' + esc(f[0] || '') + '</td><td class="type">' + ctx.inline(f[1] || '') + '</td><td>' + ctx.inline(f[2] || '') + '</td></tr>';
           }).join('') + '</tbody></table>' : '') +
         '</div>';
     }).join('') + '</div>';
@@ -428,7 +472,7 @@ window.ScreenFigure = (function () {
       ctx.warn('ui-theme "' + preset + '" is not a preset (' + PRESETS.join(', ') + '). drawn with default');
       preset = 'default';
     }
-    var model = parse(src, ctx.warn);
+    var model = parse(kind, src, ctx.warn);
     var body = kind === 'cards' ? cards(model, ctx) : screen(model, ctx);
     return '<div class="sf" data-preset="' + preset + '">' +
       (warnings.length ? '<div class="sf-warn">' + warnings.map(esc).join('<br>') + '</div>' : '') + body + '</div>';
@@ -451,10 +495,15 @@ window.ScreenFigure = (function () {
     var stage = root.querySelector('.sf-stage');
     if (!stage || !stage.clientWidth) return;
     var device = stage.querySelector('.sf-device');
-    var regions = root.querySelectorAll('.sf-region');
     var marks = root.querySelectorAll('.sf-mark'), badges = root.querySelectorAll('.sf-badge');
     var notes = root.querySelectorAll('.sf-note'), list = root.querySelector('.sf-notes');
     var svg = root.querySelector('.sf-leaders');
+    var screenEl = root.querySelector('.sf-screen');
+    // A sheet lies over the screen, so the screen has to be tall enough to hold it.
+    screenEl.style.minHeight = '';
+    Array.prototype.forEach.call(root.querySelectorAll('.sheet-region'), function (r) {
+      if (r.offsetHeight + 120 > screenEl.offsetHeight) screenEl.style.minHeight = (r.offsetHeight + 120) + 'px';
+    });
     var W = stage.clientWidth, dw = device.offsetWidth;
     var stacked = W < dw + GUTTER + NOTE_MIN;
     stage.classList.toggle('stacked', stacked);
@@ -465,9 +514,10 @@ window.ScreenFigure = (function () {
     if (!stacked) { list.style.left = nx + 'px'; list.style.width = (W - nx) + 'px'; }
     else { list.style.left = ''; list.style.width = ''; }
 
-    Array.prototype.forEach.call(regions, function (r, i) {
+    // Regions are not in entry order in the page (a sheet comes last), so each is found by its number.
+    Array.prototype.forEach.call(marks, function (m, i) {
+      var r = root.querySelector('.sf-region[data-n="' + (i + 1) + '"]');
       var p = offsetIn(r, device), h = r.offsetHeight;
-      var m = marks[i];
       m.style.left = (p.x + 3) + 'px'; m.style.width = Math.max(4, r.offsetWidth - 6) + 'px';
       m.style.top = (p.y + 1) + 'px'; m.style.height = Math.max(4, h - 2) + 'px';
       var cy = p.y + h / 2, by = Math.max(cy, lastBadge + BADGE_STEP);
@@ -527,12 +577,22 @@ window.ScreenFigure = (function () {
   // stylesheet and the token values it was drawn with.
   function toSvg(host) {
     var root = host.shadowRoot, box = root && root.querySelector('.sf');
-    if (!box) return null;
+    if (!box || !box.offsetWidth) return null;
     var w = Math.ceil(box.offsetWidth) + PAD * 2, h = Math.ceil(box.offsetHeight) + PAD * 2;
     var cs = getComputedStyle(host);
     var vars = TOKENS.map(function (t) { return t + ':' + cs.getPropertyValue(t).trim(); }).join(';');
     var clone = box.cloneNode(true);
-    Array.prototype.forEach.call(clone.querySelectorAll('.hl'), function (el) { el.classList.remove('hl'); });
+    Array.prototype.forEach.call(clone.querySelectorAll('*'), function (el) {
+      el.classList.remove('hl');
+      // HTML takes attribute names XML does not (`@click`, `:class`), and one of them makes the SVG unreadable.
+      Array.prototype.slice.call(el.attributes).forEach(function (a) {
+        if (!/^[A-Za-z_][\w.-]*$/.test(a.name)) el.removeAttribute(a.name);
+      });
+    });
+    // A comment holding `--` is not XML either, and comments draw nothing.
+    var walker = document.createTreeWalker(clone, NodeFilter.SHOW_COMMENT), dead = [];
+    while (walker.nextNode()) dead.push(walker.currentNode);
+    dead.forEach(function (n) { n.remove(); });
     var sheet = root.querySelector('style');
     var css = (sheet ? sheet.textContent : '').replace(/]]>/g, ']] >');
     var body = new XMLSerializer().serializeToString(clone);

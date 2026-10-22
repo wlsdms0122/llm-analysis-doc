@@ -85,7 +85,9 @@ def parse_frontmatter(src: str) -> dict:
         k, _, v = line.partition(":")
         if not _:
             continue
-        meta[k.strip()] = v.strip().strip("'\"")
+        v = v.strip()
+        # A quoted value is taken whole. An unquoted one ends where a ` #` comment starts.
+        meta[k.strip()] = v.strip("'\"") if v[:1] in "'\"" else re.sub(r"\s+#.*$", "", v)
     return meta
 
 

@@ -200,7 +200,7 @@ The name after the fence is the caption, as with mermaid.
 | `image("label", ratio: "16:9")` | A placeholder for a picture. `height: 180` instead of a ratio, `bleed` for edge to edge |
 | `divider` / `divider(thick)` | A hairline, or the thick band that separates sections |
 | `space` / `space(16)` | In a row, pushes what follows to the far end. On its own row, a fixed gap |
-| `tabbar(home: "홈", gift: "혜택", on: "홈")` | The bottom tab bar. Each key is an icon name and its value the label. It always sits at the bottom of the screen |
+| `tabbar(home: "홈", gift: "혜택", on: "홈")` | The bottom tab bar. Each key is an icon name and its value the label. Its region sits at the bottom of the screen, under every other region |
 
 Icon names: `back` `close` `chevron` `down` `share` `more` `settings` `search` `copy` `check` `plus` `bell` `home` `gift` `card` `menu` `info` `alert` `help` `heart` `star` `user` `lock` `calendar` `clock` `send` `refresh` `edit` `trash` `image` `filter` `bank` `wallet` `chat` `pin` `eye` `phone` `qr` `external` `download`.
 
@@ -245,7 +245,7 @@ Several elements of the same kind side by side, each with its name, a line about
 ```
 ````
 
-Each entry takes the lines of a screen region (`ui`, `note`, `html`, `[planned]`) and adds `field: name | type | meaning`, one per field, drawn as a table under the element. The meaning takes inline markdown. A `sheet` is drawn over a dimmed backdrop.
+Each entry takes the lines of a screen region (`ui`, `note`, `html`, `[planned]`) and adds `field: name | type | meaning`, one per field, drawn as a table under the element. The type and the meaning take inline markdown. Only the first two `|` separate, and a `|` inside a code span or quotes does not, so a union type goes in backticks: ``field: status | `"open" | "closed"` | the state``. A `sheet` is drawn over a dimmed backdrop.
 
 ## Flow canvas
 
