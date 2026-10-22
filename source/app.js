@@ -1093,7 +1093,7 @@
     var clone = svg.cloneNode(true);
     clone.removeAttribute('style');
     clone.removeAttribute('data-orig-style');
-    clone.removeAttribute('id');
+    // The id stays. mermaid scopes the SVG's own <style> to it (#mermaid-svg-... .node rect).
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
     clone.setAttribute('width', s.w);
