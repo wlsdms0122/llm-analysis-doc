@@ -30,7 +30,8 @@
     grip: '<svg viewBox="0 0 16 16" class="grip"><circle cx="6" cy="4" r="1.1"/><circle cx="10" cy="4" r="1.1"/><circle cx="6" cy="8" r="1.1"/><circle cx="10" cy="8" r="1.1"/><circle cx="6" cy="12" r="1.1"/><circle cx="10" cy="12" r="1.1"/></svg>',
     canvas: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="9.5" y="2.5" width="5" height="3.5" rx="1"/><rect x="5.5" y="10" width="5" height="3.5" rx="1"/><path d="M4 6v2h8V6M8 8v2"/></svg>',
     chevronUp: '<svg viewBox="0 0 16 16"><path d="M4 10L8 6l4 4"/></svg>',
-    chevronDown: '<svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>'
+    chevronDown: '<svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>',
+    pick: '<svg viewBox="0 0 16 16"><path d="M2.5 5.5v-3h3M10.5 2.5h3v3M13.5 10.5v3h-3M5.5 13.5h-3v-3"/><path d="M8 6v4M6 8h4"/></svg>'
   };
 
   function toast(msg) {
@@ -41,8 +42,8 @@
     toast._t = setTimeout(function () { t.classList.remove('on'); }, 1800);
   }
 
-  function download(name, text, mime) {
-    var b = new Blob([text], { type: (mime || 'text/plain') + ';charset=utf-8' });
+  function download(name, content, mime) {
+    var b = content instanceof Blob ? content : new Blob([content], { type: (mime || 'text/plain') + ';charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(b);
     a.download = name;
@@ -347,6 +348,8 @@
           out.push(stash(renderCanvasStub(cap, text, gi2), indent));
         } else if (lang === 'trace' || lang === 'seq') {
           out.push(stash(renderSeq(text), indent));
+        } else if (lang === 'annotated' || lang === 'cards') {
+          out.push(stash(renderAnnotated(lang, text, cap), indent));
         } else {
           out.push(line);
           out.push.apply(out, body);
@@ -457,12 +460,12 @@
         '<span class="zlabel zoom-only">100%</span>' +
         '<button class="zoom-only" data-act="zin" title="Zoom in">' + ICON.zoomIn + '</button>' +
         '<button class="zoom-only" data-act="zfit" title="Fit">' + ICON.fit + '</button>' +
-        '<button data-act="src" title="Show the mermaid source">' + ICON.code + '</button>' +
-        '<button class="src-only" data-act="copysrc" title="Copy the mermaid source">' + ICON.copy + '</button>' +
+        '<button data-act="src" title="Show the source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the source">' + ICON.copy + '</button>' +
         '<button data-act="svg" title="Download the SVG">' + ICON.download + '</button>' +
         '<button data-act="zoom" title="Enlarge">' + ICON.expand + '</button>' +
       '</div>' +
-      '<div class="figure-body"><pre class="mermaid-src"><code>' + esc(src) + '</code></pre>' +
+      '<div class="figure-body"><pre class="figure-src"><code>' + esc(src) + '</code></pre>' +
       '<div class="mermaid-out" id="' + id + '"></div></div></div>';
   }
 
@@ -474,10 +477,36 @@
         '<span class="cap"' + (gi >= 0 ? ' data-gi="' + gi + '"' : '') + '>' + esc(title || '') + '</span>' +
         '<span class="sp"></span>' +
         '<button data-act="canvas" data-gi="' + gi + '" title="Show on the flow canvas">' + ICON.canvas + '</button>' +
-        '<button data-act="src" title="Show the mermaid source">' + ICON.code + '</button>' +
-        '<button class="src-only" data-act="copysrc" title="Copy the mermaid source">' + ICON.copy + '</button>' +
+        '<button data-act="src" title="Show the source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the source">' + ICON.copy + '</button>' +
       '</div>' +
-      '<div class="figure-body"><pre class="mermaid-src"><code>' + esc(src) + '</code></pre></div></div>';
+      '<div class="figure-body"><pre class="figure-src"><code>' + esc(src) + '</code></pre></div></div>';
+  }
+
+  // An annotated or cards figure. Its drawing goes into a shadow root once the document is in
+  // the page, so here it is only the markup, kept by index.
+  var ANNOTATED = [];
+  var ASSETS = (function () {
+    try { return JSON.parse(document.getElementById('doc-assets').textContent || '{}'); } catch (e) { return {}; }
+  })();
+  function renderAnnotated(kind, src, caption) {
+    ANNOTATED.push(Annotated.draw(kind, src, { inline: mdInline, preset: META.uiTheme, assets: ASSETS }));
+    return '<div class="figure annotated">' +
+      '<div class="figure-bar">' +
+        '<span class="cap">' + esc(caption || '') + '</span><span class="sp"></span>' +
+        '<button class="zoom-only" data-act="zout" title="Zoom out">' + ICON.zoomOut + '</button>' +
+        '<span class="zlabel zoom-only">100%</span>' +
+        '<button class="zoom-only" data-act="zin" title="Zoom in">' + ICON.zoomIn + '</button>' +
+        '<button class="zoom-only" data-act="zfit" title="Fit">' + ICON.fit + '</button>' +
+        (kind === 'annotated' ? '<button data-act="pick" title="Pick: drag over the drawing to copy an at: line">' + ICON.pick + '</button>' : '') +
+        '<button data-act="src" title="Show the source">' + ICON.code + '</button>' +
+        '<button class="src-only" data-act="copysrc" title="Copy the source">' + ICON.copy + '</button>' +
+        '<button data-act="svg" title="Download the SVG">' + ICON.download + '</button>' +
+        '<button class="label" data-act="png" title="Download the PNG">PNG</button>' +
+        '<button data-act="zoom" title="Enlarge">' + ICON.expand + '</button>' +
+      '</div>' +
+      '<div class="figure-body"><pre class="figure-src"><code>' + esc(src) + '</code></pre>' +
+      '<div class="sf-out" data-sf="' + (ANNOTATED.length - 1) + '"></div></div></div>';
   }
 
   function renderSeq(src) {
@@ -548,7 +577,7 @@
     'trapezoid-top': 'trapezoid', 'inv-trapezoid': 'trapezoid'
   });
 
-  var META = /^@\{(.*)\}$/;
+  var NODE_META = /^@\{(.*)\}$/;
   var META_ENTRY = /([\w-]+)\s*:\s*(?:"([^"]*)"|'([^']*)'|([^,}]*))/g;
 
   // The keys mermaid takes in `@{ ... }` beyond these two name things the canvas has no way
@@ -571,7 +600,7 @@
     var m = tok.match(/^([\w.$-]+)\s*(.*)$/);
     if (!m) return null;
     var id = m[1], rest = m[2].trim(), shape = null, label = null;
-    var meta = rest.match(META);
+    var meta = rest.match(NODE_META);
     if (meta) {
       var read = parseMeta(meta[1]);
       shape = read.shape;
@@ -719,6 +748,8 @@
     // A key means the document called this diagram by name. Only then does the caption follow the list name.
     if (g && g.key) el.textContent = g.label;
   });
+
+  $$('#doc .sf-out').forEach(function (el) { Annotated.mount(el, ANNOTATED[Number(el.dataset.sf)]); });
 
   $$('#doc table').forEach(function (t) {
     if (t.parentElement.classList.contains('table-scroll')) return;
@@ -958,7 +989,7 @@
       }
     });
     $$('.figure[data-mermaid]').forEach(function (fig, idx) {
-      var src = $('.mermaid-src', fig).textContent;
+      var src = $('.figure-src', fig).textContent;
       var out = $('.mermaid-out', fig);
       mermaid.render('mermaid-svg-' + pass + '-' + idx, src).then(function (r) {
         if (pass !== mermaidPass) return;   // a late result from the previous theme is dropped
@@ -994,7 +1025,24 @@
 
   function figView(fig) { if (!fig._v) fig._v = { s: 1, x: 0, y: 0 }; return fig._v; }
 
+  // What an enlarged figure moves and scales: the mermaid output or the screen host.
+  function figDrawing(fig) { return $('.mermaid-out', fig) || $('.sf-out', fig); }
+  function figSize(fig) {
+    var svg = $('.mermaid-out svg', fig), sf = $('.sf-out', fig);
+    if (svg) return svgSize(svg);
+    return sf && sf.offsetWidth ? { w: sf.offsetWidth, h: sf.offsetHeight } : null;
+  }
+
+  // An annotated figure's host lays itself out by its width. Lifted out of the page it would shrink to
+  // the device alone and drop its notes below, so the width is held from before the lift,
+  // and held wide enough for the notes to stand beside the device.
   function figLockSize(fig, on) {
+    var sf = $('.sf-out', fig);
+    if (sf) {
+      if (!on) sf.style.width = '';
+      else if (!sf.style.width) sf.style.width = Math.max(sf.offsetWidth, 760) + 'px';
+      return;
+    }
     var svg = $('.mermaid-out svg', fig), out = $('.mermaid-out', fig);
     if (!svg) return;
     if (on) {
@@ -1012,7 +1060,7 @@
   }
 
   function figApply(fig) {
-    var st = figView(fig), out = $('.mermaid-out', fig);
+    var st = figView(fig), out = figDrawing(fig);
     if (!fig.classList.contains('zoom')) { out.style.transform = ''; return; }
     out.style.transform = 'translate(' + st.x + 'px,' + st.y + 'px) scale(' + st.s + ')';
     var lab = $('.zlabel', fig);
@@ -1020,10 +1068,11 @@
   }
 
   function figFit(fig) {
-    var st = figView(fig), body = $('.figure-body', fig), svg = $('.mermaid-out svg', fig);
-    if (!svg) return;
+    var st = figView(fig), body = $('.figure-body', fig);
     figLockSize(fig, true);
-    var r = body.getBoundingClientRect(), s = svgSize(svg);
+    var s = figSize(fig);
+    if (!s) return;
+    var r = body.getBoundingClientRect();
     var W = r.width || 800, H = r.height || 500;
     st.s = Math.min((W - 56) / s.w, (H - 56) / s.h, 3);
     if (!isFinite(st.s) || st.s <= 0) st.s = 1;
@@ -1042,14 +1091,15 @@
   }
 
   // Exported as a self contained SVG. Size, background and namespaces have to survive outside the page.
-  function exportFigureSVG(fig) {
+  // A rendered mermaid figure as a standalone SVG, or null before it is drawn.
+  function mermaidSvg(fig) {
     var svg = $('.mermaid-out svg', fig);
-    if (!svg) return toast('not rendered yet');
+    if (!svg) return null;
     var s = svgSize(svg);
     var clone = svg.cloneNode(true);
     clone.removeAttribute('style');
     clone.removeAttribute('data-orig-style');
-    clone.removeAttribute('id');
+    // The id stays. mermaid scopes the SVG's own <style> to it (#mermaid-svg-... .node rect).
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
     clone.setAttribute('width', s.w);
@@ -1062,11 +1112,33 @@
     rect.setAttribute('width', s.w); rect.setAttribute('height', s.h);
     rect.setAttribute('fill', bg);
     clone.insertBefore(rect, clone.firstChild);
+    return { svg: new XMLSerializer().serializeToString(clone), w: s.w, h: s.h };
+  }
 
+  function exportFigureSVG(fig) {
+    var s = mermaidSvg(fig);
+    if (!s) return toast('not rendered yet');
     var cap = $('.cap', fig);
     var name = slug((cap && cap.textContent.trim()) || 'diagram');
-    var out = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
-    download((META.slug || 'diagram') + '-' + name + '.svg', out, 'image/svg+xml');
+    download((META.slug || 'diagram') + '-' + name + '.svg', '<?xml version="1.0" encoding="UTF-8"?>\n' + s.svg, 'image/svg+xml');
+  }
+
+  function dataUrlBlob(url) {
+    var bin = atob(url.slice(url.indexOf(',') + 1)), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: 'image/png' });
+  }
+
+  function exportAnnotated(fig, format) {
+    var host = $('.sf-out', fig), cap = $('.cap', fig);
+    var name = (META.slug || 'figure') + '-' + slug((cap && cap.textContent.trim()) || 'figure');
+    if (format === 'svg') {
+      var s = Annotated.toSvg(host);
+      if (!s) return toast('not drawn yet');
+      return download(name + '.svg', '<?xml version="1.0" encoding="UTF-8"?>\n' + s.svg, 'image/svg+xml');
+    }
+    Annotated.toPng(host).then(function (url) { download(name + '.png', dataUrlBlob(url)); },
+      function () { toast('this browser will not draw the PNG, use the SVG'); });
   }
 
   docEl.addEventListener('click', function (e) {
@@ -1074,6 +1146,7 @@
     if (btn) {
       var fig = btn.closest('.figure'), act = btn.dataset.act;
       if (act === 'zoom') {
+        if (!fig.classList.contains('zoom')) figLockSize(fig, true);
         var on = fig.classList.toggle('zoom');
         btn.innerHTML = on ? ICON.close : ICON.expand;
         btn.title = on ? 'Close' : 'Enlarge';
@@ -1085,14 +1158,21 @@
       else if (act === 'src') {
         var showing = fig.classList.toggle('showsrc');
         btn.classList.toggle('on', showing);
-        btn.title = showing ? 'Show the diagram' : 'Show the mermaid source';
+        btn.title = showing ? 'Show the figure' : 'Show the source';
       }
       else if (act === 'copysrc') {
-        copyText($('.mermaid-src', fig).textContent).then(
-          function () { toast('mermaid source copied'); },
+        copyText($('.figure-src', fig).textContent).then(
+          function () { toast('source copied'); },
           function () { toast('copy failed'); });
       }
-      else if (act === 'svg') exportFigureSVG(fig);
+      else if (act === 'svg') { if ($('.sf-out', fig)) exportAnnotated(fig, 'svg'); else exportFigureSVG(fig); }
+      else if (act === 'png') exportAnnotated(fig, 'png');
+      else if (act === 'pick') {
+        var picking = btn.classList.toggle('on');
+        Annotated.pick($('.sf-out', fig), picking, function (line) {
+          copyText(line).then(function () { toast(line + '  copied'); }, function () { toast(line); });
+        });
+      }
       else if (act === 'canvas') { setView('canvas'); canvas.open(Number(btn.dataset.gi)); }
       return;
     }
@@ -2927,5 +3007,52 @@
   if (location.hash) {
     var t = document.getElementById(location.hash.slice(1));
     if (t) setTimeout(function () { t.scrollIntoView(); }, 60);
+  }
+
+  // ---------------------------------------------------------------- shot mode
+  // `?shot=1` is how `open-package shot` reads the figures: the page draws every figure as a
+  // PNG in each theme asked for and leaves them in <pre id="adoc-shots"> as JSON, which a
+  // headless browser hands back with --dump-dom.
+  //   themes=light,dark  figure=<caption or number>  part=screen (the drawing alone)
+  var SHOT = new URLSearchParams(location.search);
+  if (SHOT.get('shot')) {
+    var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var shots = [];
+    var finish = function (error) {
+      var pre = document.createElement('pre');
+      pre.id = 'adoc-shots';
+      pre.textContent = JSON.stringify({ shots: shots, error: error || null });
+      document.body.appendChild(pre);
+    };
+    (async function () {
+      if (window.__mermaidReady) await window.__mermaidReady.catch(function () { });
+      var want = SHOT.get('figure'), part = SHOT.get('part') || '';
+      var figs = $$('#doc .figure').filter(function (f) { return !f.classList.contains('canvas-only'); });
+      var taken = {};
+      var named = figs.map(function (f, i) {
+        var cap = ($('.cap', f) || {}).textContent || '';
+        var name = cap.trim() ? slug(cap.trim()) : 'figure-' + (i + 1);
+        // Two figures with one caption still get two files.
+        taken[name] = (taken[name] || 0) + 1;
+        if (taken[name] > 1) name += '-' + taken[name];
+        return { fig: f, name: name, cap: cap.trim(), n: String(i + 1) };
+      }).filter(function (x) { return !want || x.cap === want || x.name === slug(want) || x.n === want; });
+      if (!named.length) return finish('no figure matches "' + want + '"');
+      var themes = (SHOT.get('themes') || 'light,dark').split(',');
+      for (var t = 0; t < themes.length; t++) {
+        document.documentElement.setAttribute('data-theme', themes[t]);
+        REPAINT.forEach(function (f) { f(); });
+        await wait(1500);
+        for (var i = 0; i < named.length; i++) {
+          var x = named[i], host = $('.sf-out', x.fig), url = null;
+          try {
+            if (host) url = await Annotated.toPng(host, part);
+            else { var s = mermaidSvg(x.fig); if (s) url = await Annotated.svgToPng(s, 2); }
+          } catch (e) { url = null; }
+          shots.push({ name: x.name, theme: themes[t], png: url });
+        }
+      }
+      finish();
+    })().catch(function (e) { finish(String(e && e.message || e)); });
   }
 })();

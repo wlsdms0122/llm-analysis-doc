@@ -5,7 +5,7 @@ version = "1.0.0"
 
 [package]
 name = "analysis-doc"
-version = "1.5.0"
+version = "1.6.0"
 description = "Bakes one markdown file into a single HTML document with no external requests"
 requires = ["python3", "bash", "curl"]
 
@@ -13,3 +13,6 @@ requires = ["python3", "bash", "curl"]
 setup = "bash source/fetch-vendor.sh"
 build = "python3 source/build.py"
 verify = "bash source/verify.sh"
+shot = "python3 source/shot.py"
+catalog = "python3 source/catalog.py"
+watch = "python3 source/watch.py"

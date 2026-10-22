@@ -12,7 +12,7 @@ Leave `-o` out and it bakes next to the input with the extension swapped (`flow.
 
 The output is a single file with no external requests. marked and mermaid are carried inside it. It opens the same way on a corporate network, offline, or uploaded to Slack.
 
-Only the mermaid a document draws goes in. Flowcharts alone come to about 1.1MB, and a document with no diagram to about 215KB, against 3.6MB for the whole of mermaid. The build prints what it put in.
+Only the mermaid a document draws goes in. Flowcharts alone come to about 1.1MB, and a document with no diagram to about 270KB, against 3.6MB for the whole of mermaid. The build prints what it put in.
 
 ## Design
 
@@ -44,6 +44,7 @@ title: Native signing flow
 kicker: TossBank iOS
 subtitle: 2026-08-28 draft
 slug: native-sign-flow        # canvas storage key and export filename
+ui-theme: toss                # the preset for the ui-* classes in ```annotated and ```cards
 ---
 ```
 
@@ -148,6 +149,82 @@ title: signing entry
 + app | opens the scheme |
 ```
 ````
+
+### Annotated figures: ```annotated
+
+A drawing with numbered notes that point at its parts. The drawing is HTML written in the block, so it can be anything a page can show: an app screen, a chart on a `<canvas>`, an `<svg>`, a design capture, something that moves when it is pressed. The shell gives it a frame, the `ui-*` classes for app UI, and the annotations: a number badge and a dotted leader for each note, and the note cards beside the drawing. Pointing at a part, its badge or its card lights up all three.
+
+````
+```annotated order detail
+frame: phone
+html:
+  <nav class="ui-nav" id="nav"><i class="ui-icon back"></i><b>주문 상세</b></nav>
+  <div class="ui-stack">
+    <div class="ui-notice" id="alert"><i class="ui-icon info"></i><div><small>배송 지연</small>10월 23일에 도착해요.</div></div>
+    <div class="ui-text xl" id="amount">48,000원</div>
+  </div>
+- top notice [planned]
+  at: #alert
+  note: the state on this order the user has to check · `order.alerts`
+- amount paid
+  at: #amount
+  note: amount paid · `payment.amount`
+```
+````
+
+The name after the fence is the caption, as with mermaid.
+
+| line | what it is |
+|---|---|
+| `frame: …` | Before `html:`. `phone` (the default) draws the bezel, status bar and home indicator around a 375px screen. `browser` draws a window with `url:` in its address bar. `none` draws the drawing alone |
+| `width: 480` | The drawing's width for `browser` and `none`. Without it the drawing takes the width of its content |
+| `html:` | The drawing, on the lines after it. It runs until the next note or figure line at the `html:` column or left of it, so a `<pre>` or a template literal may start at column 0. Blank lines inside are kept |
+| `- name` | A note. The name goes on its card |
+| `- name [planned]` | A part the product does not have yet. It is hatched over the drawing and tagged on its card |
+| `at: …` | What the note points at (below) |
+| `note: …` | A line on the card. Inline markdown works, so a field goes in a code span. Repeat it for more lines |
+
+**`at:`** takes one of three forms. Units are CSS pixels of the drawing as it is laid out.
+
+| form | points at |
+|---|---|
+| `at: #amount` | the element the selector finds in the drawing. The badge follows it when the drawing changes size or changes itself |
+| `at: #chart 320, 0, 60, 200` | a box `x, y, width, height` inside that element, for a part of a canvas or an image. The box is outlined, since it has no edge of its own |
+| `at: 0, 88, 375, 72` | a box in the drawing |
+
+A selector can be anything `querySelector` takes. Badges stand beside the drawing in the order their parts come down it, a tall part meeting its leader near its top, so a container and the parts inside it read in order.
+
+**The drawing is the document's own HTML.** It is drawn inside the figure's shadow root, so the shell's styles do not reach in. Its `<style>` is rewritten to start at the drawing, so it reaches neither the annotations nor another figure. Class names and `data-` attributes starting with `sf-` belong to the frame and the annotations.
+
+- **Scripts run.** An inline `<script>` runs once the drawing is in the page, with the figure's shadow root as `root` and the drawing element as `drawing`, so `drawing.querySelector('#chart')` finds the canvas. In ```cards every drawing shares one root, so look things up through `drawing`. A script with `src` is not run, since the document makes no requests. Opening a document runs its scripts, the same trust as opening any HTML file.
+- **Images are carried.** A relative path in `src` or `poster`, or an image path in `href` (an svg `<image>`), that names a file next to the markdown goes into the document as a data URL when it is baked. The markdown keeps the path, so "Export MD" still hands back the file as it was, and the HTML opens anywhere on its own. The build prints how much went in.
+- **App UI comes from `ui-*` classes.** `ui-nav`, `ui-stack`, `ui-text xl bold`, `ui-button gray`, `ui-item`, `ui-notice`, `ui-card`, `ui-sheet`, `ui-tabbar`, `ui-icon share` and the rest. `open-package catalog` bakes every class and icon with its markup. The classes only set what the preset owns, so a drawing written with them looks right in any preset, and its own `<style>` can read the preset as `var(--ui-accent)`, `var(--ui-pad)` and the rest.
+
+**The drawing keeps its own look.** The `ui-*` values come from a preset rather than from the document theme, so a dark document still shows an app screen as it is designed. Only what is outside the drawing (badges, leaders, cards) follows the theme. The preset is picked once for the document with `ui-theme` in the frontmatter: `default`, `ios`, `material` or `toss`.
+
+What the shell cannot read (a line outside a note, a frame it does not have, a note with no `at:`, a selector that finds nothing, a script that throws) is listed in red above the figure. A note whose `at:` finds nothing still has its card, without a badge.
+
+The toolbar is the figure toolbar with one more button. **Pick** turns the drawing into a place to measure: drag over a part and an `at:` line for it goes on the clipboard, relative to the nearest element with an `id` under where the drag started, otherwise to the drawing. A click without a drag copies that element's selector. Then show source, copy, download SVG, download PNG, enlarge. The SVG holds the drawn figure as HTML inside a `foreignObject`, with the theme it was drawn in and each canvas as its pixels. The PNG is that SVG at twice its size. Where the figure has no room for the cards beside the drawing, they go under it.
+
+### Components: ```cards
+
+Several drawings side by side in the same frame, each with its name, a line about it, and its fields. Use it to show which field lands where across the kinds of one thing. `:::compare` sets two things against each other, this puts N things in the same frame.
+
+````
+```cards notices
+- one line notice
+  note: a short notice over the screen
+  html: <div class="ui-stack"><div class="ui-notice"><i class="ui-icon info"></i><div>10월 23일에 도착해요.</div></div></div>
+  field: text | String | the notice
+  field: link | URL? | where a tap goes
+- failure notice [planned]
+  html:
+    <div class="ui-stack"><div class="ui-notice danger"><i class="ui-icon alert"></i><div><small>결제 실패</small>카드 한도를 확인해주세요.</div></div></div>
+  field: status | `"failed" | "limited"` | why
+```
+````
+
+Each entry takes `html:` (its drawing, as above, scripts and images included), `note:`, `[planned]`, and `field: name | type | meaning`, one per field, drawn as a table under the drawing. The type and the meaning take inline markdown. Only the first two `|` separate, and a `|` inside a code span or quotes does not, so a union type goes in backticks. A `ui-overlay` with a `ui-sheet` in it is drawn as a bottom sheet over a dimmed backdrop.
 
 ## Flow canvas
 
@@ -280,6 +357,12 @@ analysis-doc/
   source/template.html      the shell skeleton, placeholders and no content
   source/style.css          the fixed style, light and dark
   source/app.js             the fixed runtime, markdown rendering, contents, components, canvas
+  source/annotated.js       annotated and cards figures: reading the block, the drawing, notes, pick, export
+  source/annotated.css      the style inside those figures: frames, annotations, ui-* classes, presets
+  source/shot.py            draws a document's figures as PNG files, and sets one beside a design capture
+  source/catalog.py         bakes document/CATALOG.md, every ui-* class and icon, in a preset
+  source/watch.py           bakes on every change and serves the page so it reloads itself
+  document/CATALOG.md       the catalog's markdown
   source/vendor/            marked and mermaid. Not in the repository. `open-package setup` fetches them
 ```
 
