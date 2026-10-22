@@ -44,7 +44,7 @@ title: Native signing flow
 kicker: TossBank iOS
 subtitle: 2026-08-28 draft
 slug: native-sign-flow        # canvas storage key and export filename
-ui-theme: toss                # the preset app screens are drawn in (```screen, ```cards)
+ui-theme: toss                # the preset for the ui-* classes in ```annotated and ```cards
 ---
 ```
 
@@ -150,24 +150,24 @@ title: signing entry
 ```
 ````
 
-### Screens: ```screen
+### Annotated figures: ```annotated
 
-An app screen, drawn as it looks in the design, with its regions numbered and a note card beside it for each. Write the screen as a list of regions from top to bottom. The shell draws the device frame, the regions, the number badges, the dotted leaders and the note cards, and pointing at a region, a badge or a note lights up all three.
+A drawing with numbered notes that point at its parts. The drawing is HTML written in the block, so it can be anything a page can show: an app screen, a chart on a `<canvas>`, an `<svg>`, a design capture, something that moves when it is pressed. The shell gives it a frame, the `ui-*` classes for app UI, and the annotations: a number badge and a dotted leader for each note, and the note cards beside the drawing. Pointing at a part, its badge or its card lights up all three.
 
 ````
-```screen order detail
+```annotated order detail
 frame: phone
-- navigation
-  ui: nav(back, "주문 상세", share, more)
-  note: whether the order can be shared · `order.shareable`
+html:
+  <nav class="ui-nav" id="nav"><i class="ui-icon back"></i><b>주문 상세</b></nav>
+  <div class="ui-stack">
+    <div class="ui-notice" id="alert"><i class="ui-icon info"></i><div><small>배송 지연</small>10월 23일에 도착해요.</div></div>
+    <div class="ui-text xl" id="amount">48,000원</div>
+  </div>
 - top notice [planned]
-  ui: notice("배송 지연", "10월 23일에 도착해요.", action: "자세히")
+  at: #alert
   note: the state on this order the user has to check · `order.alerts`
 - amount paid
-  ui: card
-    text("주문번호 2026-1022-0001", s, sub) | icon(copy, s, faint)
-    text("48,000원", xl, bold)
-    text("포인트 2,000원 사용", s, sub)
+  at: #amount
   note: amount paid · `payment.amount`
 ```
 ````
@@ -176,76 +176,55 @@ The name after the fence is the caption, as with mermaid.
 
 | line | what it is |
 |---|---|
-| `frame: phone` | Before the first region. `phone` (the default) draws the bezel, status bar and home indicator, `none` draws the screen alone |
-| `- name` | A region. The name goes on its note card |
-| `- name [planned]` | A region the app does not have yet. It is hatched on the screen and tagged on its card |
-| `ui: …` | What the region shows. One row on the same line, or several rows indented under it |
-| `note: …` | A line on the region's card. Inline markdown works, so a field goes in a code span. Repeat it for more lines |
-| `html:` | The region written in HTML, indented under it. For what the primitives cannot draw |
+| `frame: …` | Before `html:`. `phone` (the default) draws the bezel, status bar and home indicator around a 375px screen. `browser` draws a window with `url:` in its address bar. `none` draws the drawing alone |
+| `width: 480` | The drawing's width for `browser` and `none`. Without it the drawing takes the width of its content |
+| `html:` | The drawing, indented under it. Blank lines inside are kept |
+| `- name` | A note. The name goes on its card |
+| `- name [planned]` | A part the product does not have yet. It is hatched over the drawing and tagged on its card |
+| `at: …` | What the note points at (below) |
+| `note: …` | A line on the card. Inline markdown works, so a field goes in a code span. Repeat it for more lines |
 
-**A row** is one or more elements separated by `|`, laid out left to right. An element is `kind(arguments)`. An argument is a quoted text, a `key: value`, or a bare word that switches an option on. Texts fill the element's slots in order.
+**`at:`** takes one of three forms. Units are CSS pixels of the drawing as it is laid out.
 
-| element | slots and options |
+| form | points at |
 |---|---|
-| `nav(back, "title", share, more)` | `back` or `close` goes on the left, the text is the title, other icon names go on the right. `action: "편집"` adds a text button on the right |
-| `text("…", size, weight, tone, align)` | size `xxl` `xl` `l` `m` `s` `xs` (default is body), weight `bold` `semibold` `regular`, tone `sub` `faint` `accent` `danger` `positive`, align `center` `right` |
-| `button("…", style, small, disabled)` | style `primary` (default) `secondary` `gray` `text` `danger`. Buttons in one row share its width. `small` hugs its label |
-| `chip("…", on)` | A row of chips wraps. `on` marks the selected one |
-| `badge("…", style)` | A small label. Style `accent` (default) `danger` `gray` `solid` |
-| `item(icon, "title", "sub", "right", "right sub", trail)` | A list row. The first bare word is the leading mark: an icon name draws the icon, any other word draws its first letter (a bank or brand). `right:` and `sub:` fill a slot by name. Trail `chevron`, `toggle`, `check`, with `on` for a toggle or check that is set |
-| `notice("kicker", "text", action: "…", tone)` | A banner. With one text it is the text alone. Tone `danger` or `gray`, and an icon name replaces the leading icon |
-| `tabs("a", "b", "c", on: "b")` | Tabs under a line. `fill` spreads them evenly. Without `on` the first is selected |
-| `input("placeholder", label: "…", value: "…")` | A text field. A value replaces the placeholder |
-| `icon(name, …, tone, s)` | One or more icons. Tone `sub` `faint` `accent` `danger` `positive` `fg`, `s` for small |
-| `image("label", ratio: "16:9")` | A placeholder for a picture. `height: 180` instead of a ratio, `bleed` for edge to edge |
-| `divider` / `divider(thick)` | A hairline, or the thick band that separates sections |
-| `space` / `space(16)` | In a row, pushes what follows to the far end. On its own row, a fixed gap |
-| `tabbar(home: "홈", gift: "혜택", on: "홈")` | The bottom tab bar. Each key is an icon name and its value the label. Its region sits at the bottom of the screen, under every other region |
+| `at: #amount` | the element the selector finds in the drawing. The badge follows it when the drawing changes size or changes itself |
+| `at: #chart 320, 0, 60, 200` | a box `x, y, width, height` inside that element, for a part of a canvas or an image. The box is outlined, since it has no edge of its own |
+| `at: 0, 88, 375, 72` | a box in the drawing |
 
-Icon names: `back` `close` `chevron` `down` `share` `more` `settings` `search` `copy` `check` `plus` `bell` `home` `gift` `card` `menu` `info` `alert` `help` `heart` `star` `user` `lock` `calendar` `clock` `send` `refresh` `edit` `trash` `image` `filter` `bank` `wallet` `chat` `pin` `eye` `phone` `qr` `external` `download`.
+A selector can be anything `querySelector` takes. Badges stand beside the drawing in the order their parts come down it, a tall part meeting its leader near its top, so a container and the parts inside it read in order.
 
-**Containers** hold rows indented under them. `card` is a rounded surface, `section` is a full width band in the section colour, and `sheet` is a bottom sheet. A region whose `ui` is a sheet is laid over the bottom of the screen, and the screen behind it dims.
+**The drawing is the document's own HTML.** It is drawn inside the figure's shadow root, so the shell's styles do not reach in. Its `<style>` is rewritten to start at the drawing, so it reaches neither the annotations nor another figure. Class names starting with `sf-` belong to the frame and the annotations.
 
-```
-- confirm
-  ui: sheet
-    text("주문을 취소할까요?", l, bold)
-    button("닫기", gray) | button("취소하기", danger)
-```
+- **Scripts run.** An inline `<script>` runs once the drawing is in the page, with the figure's shadow root as `root` and the drawing element as `drawing`, so `root.getElementById('chart')` finds the canvas. A script with `src` is not run, since the document makes no requests. Opening a document runs its scripts, the same trust as opening any HTML file.
+- **Images are carried.** A relative path in `src`, `href` or `poster` that names a file next to the markdown goes into the document as a data URL when it is baked. The markdown keeps the path, so "Export MD" still hands back the file as it was, and the HTML opens anywhere on its own. The build prints how much went in.
+- **App UI comes from `ui-*` classes.** `ui-nav`, `ui-stack`, `ui-text xl bold`, `ui-button gray`, `ui-item`, `ui-notice`, `ui-card`, `ui-sheet`, `ui-tabbar`, `ui-icon share` and the rest. `open-package catalog` bakes every class and icon with its markup. The classes only set what the preset owns, so a drawing written with them looks right in any preset, and its own `<style>` can read the preset as `var(--ui-accent)`, `var(--ui-pad)` and the rest.
 
-**The app screen keeps its own look.** Its colours, type, radii and spacing come from a preset rather than from the document theme, so a dark document still shows the screen as it is designed. Only what is outside the screen (badges, leaders, cards) follows the theme. The preset is picked once for the document with `ui-theme` in the frontmatter: `default`, `ios`, `material` or `toss`. A document never sets colours or spacing itself.
+**The drawing keeps its own look.** The `ui-*` values come from a preset rather than from the document theme, so a dark document still shows an app screen as it is designed. Only what is outside the drawing (badges, leaders, cards) follows the theme. The preset is picked once for the document with `ui-theme` in the frontmatter: `default`, `ios`, `material` or `toss`.
 
-**HTML regions** take any markup. The figure is drawn inside its own shadow root, so the shell's styles do not reach in, and a `<style>` inside the region is rewritten to start at that region, so it does not reach the primitives or other regions. Class names starting with `sf-` belong to the primitives. Scripts are dropped.
+What the shell cannot read (a line outside a note, a frame it does not have, a note with no `at:`, a selector that finds nothing, a script that throws) is listed in red above the figure. A note whose `at:` finds nothing still has its card, without a badge.
 
-```
-- chart
-  html:
-    <style>.bar { height: 8px; background: #3182f6; border-radius: 4px }</style>
-    <div class="bar" style="width: 70%"></div>
-```
-
-What the shell cannot read (an unknown element, an option an element does not take, a line outside any region, a preset it does not have) is listed in red above the figure, and an unknown element is drawn as a dashed box holding its source.
-
-The toolbar is the figure toolbar: show source, copy, download SVG, download PNG, enlarge. The SVG holds the drawn figure as HTML inside a `foreignObject`, with the theme it was drawn in. The PNG is that SVG at twice its size. Where the figure has no room for the cards beside the device, they go under it.
+The toolbar is the figure toolbar with one more button. **Pick** turns the drawing into a place to measure: drag over a part and an `at:` line for it goes on the clipboard, relative to the nearest element with an `id` under where the drag started, otherwise to the drawing. A click without a drag copies that element's selector. Then show source, copy, download SVG, download PNG, enlarge. The SVG holds the drawn figure as HTML inside a `foreignObject`, with the theme it was drawn in and each canvas as its pixels. The PNG is that SVG at twice its size. Where the figure has no room for the cards beside the drawing, they go under it.
 
 ### Components: ```cards
 
-Several elements of the same kind side by side, each with its name, a line about it, the element itself, and its fields. Use it to show which field of a response lands where. `:::compare` sets two things against each other, this puts N things in the same frame.
+Several drawings side by side in the same frame, each with its name, a line about it, and its fields. Use it to show which field lands where across the kinds of one thing. `:::compare` sets two things against each other, this puts N things in the same frame.
 
 ````
 ```cards notices
 - one line notice
   note: a short notice over the screen
-  ui: notice("10월 23일에 도착해요.", action: "자세히")
+  html: <div class="ui-stack"><div class="ui-notice"><i class="ui-icon info"></i><div>10월 23일에 도착해요.</div></div></div>
   field: text | String | the notice
   field: link | URL? | where a tap goes
 - failure notice [planned]
-  ui: notice("결제 실패", "카드 한도를 확인해주세요.", danger)
-  field: kicker | String | the state
+  html:
+    <div class="ui-stack"><div class="ui-notice danger"><i class="ui-icon alert"></i><div><small>결제 실패</small>카드 한도를 확인해주세요.</div></div></div>
+  field: status | `"failed" | "limited"` | why
 ```
 ````
 
-Each entry takes the lines of a screen region (`ui`, `note`, `html`, `[planned]`) and adds `field: name | type | meaning`, one per field, drawn as a table under the element. The type and the meaning take inline markdown. Only the first two `|` separate, and a `|` inside a code span or quotes does not, so a union type goes in backticks: ``field: status | `"open" | "closed"` | the state``. A `sheet` is drawn over a dimmed backdrop.
+Each entry takes `html:` (its drawing, as above, scripts and images included), `note:`, `[planned]`, and `field: name | type | meaning`, one per field, drawn as a table under the drawing. The type and the meaning take inline markdown. Only the first two `|` separate, and a `|` inside a code span or quotes does not, so a union type goes in backticks. A `ui-overlay` with a `ui-sheet` in it is drawn as a bottom sheet over a dimmed backdrop.
 
 ## Flow canvas
 
@@ -378,8 +357,12 @@ analysis-doc/
   source/template.html      the shell skeleton, placeholders and no content
   source/style.css          the fixed style, light and dark
   source/app.js             the fixed runtime, markdown rendering, contents, components, canvas
-  source/screen.js          screen and cards figures: reading the block, the app UI primitives, layout, export
-  source/screen.css         the style inside a screen figure, with the ui-theme presets
+  source/annotated.js       annotated and cards figures: reading the block, the drawing, notes, pick, export
+  source/annotated.css      the style inside those figures: frames, annotations, ui-* classes, presets
+  source/shot.py            draws a document's figures as PNG files, and sets one beside a design capture
+  source/catalog.py         bakes document/CATALOG.md, every ui-* class and icon, in a preset
+  source/watch.py           bakes on every change and serves the page so it reloads itself
+  document/CATALOG.md       the catalog's markdown
   source/vendor/            marked and mermaid. Not in the repository. `open-package setup` fetches them
 ```
 

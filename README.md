@@ -16,6 +16,17 @@ open-package build <content.md> -o <out.html>
 open-package verify                       # does it work here
 ```
 
+Working on figures:
+
+```
+open-package watch <content.md>                     # bake on every save, the open page reloads itself
+open-package shot <content.md> [--theme light|dark|both] [--figure <name>] [-o <dir>]
+open-package shot <content.md> --figure <name> --compare <capture.png>
+open-package catalog <out.html> [--ui-theme <preset>]
+```
+
+`shot` draws each figure as a PNG in the themes asked for, the same picture the figure toolbar's PNG gives. `--compare` draws one figure's drawing alone and lays it beside the design capture three ways: the drawing, the capture at the same width, and the capture over the drawing at half opacity. Both need Chrome, found in `$CHROME`, the usual macOS locations, or on PATH. `catalog` bakes every `ui-*` class and icon with its markup.
+
 Leave `-o` out and the output lands next to the input under the same name (`flow.md` becomes `flow.html`).
 
 `setup` fetches marked 12.0.2 and mermaid 11.17.2 into `source/vendor/`. That is someone else's code and it comes to 23MB unpacked, so the package does not carry it. The versions and their sha256 are pinned, so the same bytes arrive wherever you fetch from. Those bytes end up inside every document baked afterwards, so different ones would change the output without saying so. What is fetched is not committed.
@@ -40,8 +51,8 @@ Skip `setup` and `build` gives you the setup command instead of a stack trace.
 - diagrams: ```mermaid. Rendered in the body, and put on the flow canvas when the first effective line is `graph` or `flowchart`
 - canvas only graphs: ```canvas. Only a toolbar in the body, the drawing lives on the canvas
 - call sequences: ```trace. Line prefixes are `-` call, `?` branch, `!` error, `+` success
-- app screens: ```screen. Regions from top to bottom, drawn from app UI primitives in a device frame, numbered, with a note card each
-- components: ```cards. Elements of one kind side by side, each with its fields
+- annotated figures: ```annotated. A drawing in HTML (app UI from `ui-*` classes, canvas, svg, images, scripts) with numbered notes pointing at its parts
+- components: ```cards. Drawings of one kind side by side, each with its fields
 
 Give a diagram its name directly after the fence, as in ```mermaid signing entry flow. That name is the caption, the name in the canvas list, and the address its layout is stored under. Without a name, or with a name already taken, the canvas opens read only. There is no fallback: a name derived from the heading would break the address the moment a section is renamed.
 
@@ -75,8 +86,12 @@ The canvas follows the same rule. It is a window onto the document's diagrams ra
 | `source/template.html` | The page skeleton. Placeholders and nothing else |
 | `source/app.js` | The runtime. Markdown preprocessing, component rendering, theme, flow canvas |
 | `source/style.css` | Design tokens and layout, light and dark |
-| `source/screen.js` | Screen and cards figures. Reading the block, the app UI primitives, layout, SVG and PNG export |
-| `source/screen.css` | The style inside a screen figure, and the `ui-theme` presets |
+| `source/annotated.js` | Annotated and cards figures. Reading the block, the drawing, notes, pick, SVG and PNG export |
+| `source/annotated.css` | The style inside those figures: frames, annotations, the `ui-*` classes and the `ui-theme` presets |
+| `source/shot.py` | `shot`. A document's figures as PNG files, and one set beside a design capture |
+| `source/catalog.py` | `catalog`. Bakes `document/CATALOG.md` in a preset |
+| `source/watch.py` | `watch`. Bakes on every change and serves the page so it reloads itself |
+| `document/CATALOG.md` | Every `ui-*` class and icon, drawn with its markup |
 | `source/vendor/` | Fetched, not carried. See `setup` |
 
 ## Changing it
